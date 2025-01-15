@@ -21,7 +21,8 @@ public:
     void End() override;
 
 #ifdef CRSF_TX_MODULE
-    bool IsArmed() override { return CRSF_to_BIT(ChannelData[4]); } // AUX1
+//    bool IsArmed() override { return CRSF_to_BIT(ChannelData[4]); } // AUX1
+    bool IsArmed() override { return true; } // permanent armed
     void handleInput() override;
     void handleOutput(int receivedBytes);
 
