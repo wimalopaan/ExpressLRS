@@ -1304,6 +1304,10 @@ void MspReceiveComplete()
             (receivedHeader->dest_addr == CRSF_ADDRESS_BROADCAST || receivedHeader->dest_addr == CRSF_ADDRESS_FLIGHT_CONTROLLER))
         {
             serialIO->queueMSPFrameTransmission(MspData);
+
+            if (config.GetSerial1Protocol() == PROTOCOL_SERIAL1_SUMD3) {
+                serial1IO->queueMSPFrameTransmission(MspData);
+            }
         }
     }
 
@@ -1314,6 +1318,7 @@ static void setupSerial()
 {
     bool sbusSerialOutput = false;
 	bool sumdSerialOutput = false;
+    bool sumd3SerialOutput = false;
 #if defined(PLATFORM_ESP8266) || defined(PLATFORM_ESP32)
     bool mavlinkSerialOutput = false;
     bool hottTlmSerial = false;
@@ -1349,6 +1354,11 @@ static void setupSerial()
     else if (config.GetSerialProtocol() == PROTOCOL_SUMD)
     {
         sumdSerialOutput = true;
+        serialBaud = 115200;
+    }
+    else if (config.GetSerialProtocol() == PROTOCOL_SUMD3)
+    {
+        sumd3SerialOutput = true;
         serialBaud = 115200;
     }
 #if defined(PLATFORM_ESP8266) || defined(PLATFORM_ESP32)
@@ -1428,7 +1438,7 @@ static void setupSerial()
         config = SERIAL_8N2;
     }
 
-    SerialMode mode = (sbusSerialOutput || sumdSerialOutput)  ? SERIAL_TX_ONLY : SERIAL_FULL;
+    SerialMode mode = (sbusSerialOutput || sumdSerialOutput || sumd3SerialOutput)  ? SERIAL_TX_ONLY : SERIAL_FULL;
     Serial.begin(serialBaud, config, mode, -1, invert);
 #elif defined(PLATFORM_ESP32)
     uint32_t config = SERIAL_8N1;
@@ -1465,6 +1475,10 @@ static void setupSerial()
     else if (sumdSerialOutput)
     {
         serialIO = new SerialSUMD(SERIAL_PROTOCOL_TX, SERIAL_PROTOCOL_RX);
+    }
+    else if (sumd3SerialOutput)
+    {
+        serialIO = new SerialSUMD3(SERIAL_PROTOCOL_TX, SERIAL_PROTOCOL_RX);
     }
     #if defined(PLATFORM_ESP8266) || defined(PLATFORM_ESP32)
     else if (mavlinkSerialOutput)
@@ -1555,6 +1569,10 @@ static void setupSerial1()
         case PROTOCOL_SERIAL1_SUMD:
             Serial1.begin(115200, SERIAL_8N1, UNDEF_PIN, serial1TXpin, false);
             serial1IO = new SerialSUMD(SERIAL1_PROTOCOL_TX, SERIAL1_PROTOCOL_RX);
+            break;
+        case PROTOCOL_SERIAL1_SUMD3:
+            Serial1.begin(115200, SERIAL_8N1, UNDEF_PIN, serial1TXpin, false);
+            serial1IO = new SerialSUMD3(SERIAL1_PROTOCOL_TX, SERIAL1_PROTOCOL_RX);
             break;
         case PROTOCOL_SERIAL1_HOTT_TLM:
             Serial1.begin(19200, SERIAL_8N2, serial1RXpin, serial1TXpin, false);
