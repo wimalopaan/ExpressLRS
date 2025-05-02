@@ -24,7 +24,7 @@ static struct luaItem_selection luaSerialProtocol = {
 #if defined(PLATFORM_STM32)
     "CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;DJI RS Pro",
 #else
-    "CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;DJI RS Pro;HoTT Telemetry;MAVLink",
+    "CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;SUMDV3;DJI RS Pro;HoTT Telemetry;MAVLink",
 #endif
     STR_EMPTYSPACE
 };
@@ -33,7 +33,7 @@ static struct luaItem_selection luaSerialProtocol = {
 static struct luaItem_selection luaSerial1Protocol = {
     {"Protocol2", CRSF_TEXT_SELECTION},
     0, // value
-    "Off;CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;DJI RS Pro;HoTT Telemetry;Tramp;SmartAudio",
+    "Off;CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;SUMDV3;DJI RS Pro;HoTT Telemetry;Tramp;SmartAudio",
     STR_EMPTYSPACE
 };
 #endif
