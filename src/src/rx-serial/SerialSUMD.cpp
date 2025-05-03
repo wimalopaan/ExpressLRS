@@ -140,14 +140,15 @@ void SerialSUMD3::queueMSPFrameTransmission(uint8_t* data) {
                 const uint16_t sw = data[8];
                 DBGLN("SUMDV3 Set: adr: %d, v: %d", swAddress, sw);
                 if ((swAddress >= minAddress) && (swAddress <= maxAddress)) {
+                    const uint8_t group = swAddress - minAddress;
                     for(uint8_t i = 0; i < 8; ++i) {
                         const bool on = (((sw >> i) & 0b01) > 0);
                         const uint8_t mask = (1 << i);
                         if (on) {
-                            mSwitches[0] |= mask;
+                            mSwitches[group] |= mask;
                         }
                         else {
-                            mSwitches[0] &= ~mask;
+                            mSwitches[group] &= ~mask;
                         }
                     }
                 }
@@ -157,14 +158,15 @@ void SerialSUMD3::queueMSPFrameTransmission(uint8_t* data) {
                 const uint16_t sw = (data[8] << 8) + data[9];
                 DBGLN("SUMDV3 Set4: adr: %d, v: %d", swAddress, sw);
                 if ((swAddress >= minAddress) && (swAddress <= maxAddress)) {
+                    const uint8_t group = swAddress - minAddress;
                     for(uint8_t i = 0; i < 8; ++i) {
                         const bool on = (((sw >> (2 * i)) & 0b11) > 0);
                         const uint8_t mask = (1 << i);
                         if (on) {
-                            mSwitches[0] |= mask;
+                            mSwitches[group] |= mask;
                         }
                         else {
-                            mSwitches[0] &= ~mask;
+                            mSwitches[group] &= ~mask;
                         }
                     }
                 }
@@ -174,9 +176,8 @@ void SerialSUMD3::queueMSPFrameTransmission(uint8_t* data) {
                 const uint8_t swGroup = (data[8] & 0x07);
                 const uint16_t swSwitches = (data[9] << 8) + data[10];
                 DBGLN("SUMDV3 Set64: adr: %d, grp: %d, v: %d", swAddress, swGroup, swSwitches);
-                if ((swAddress >= minAddress) && (swAddress <= maxAddress)) {
+                if (swAddress == minAddress) {
                     for(uint8_t i = 0; i < 8; ++i) {
-                        const uint8_t n = swGroup * 8 + i;
                         const bool on = (((swSwitches >> (2 * i)) & 0b11) > 0);
                         const uint8_t mask = (1 << i);
                         if (on) {
