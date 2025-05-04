@@ -1293,10 +1293,11 @@ void MspReceiveComplete()
             (receivedHeader->dest_addr == CRSF_ADDRESS_BROADCAST || isValidCrsfAddress(receivedHeader->dest_addr)))
         {
             serialIO->queueMSPFrameTransmission(MspData);
-
+#if defined(PLATFORM_ESP32)
             if (config.GetSerial1Protocol() == PROTOCOL_SERIAL1_SUMD3) {
                 serial1IO->queueMSPFrameTransmission(MspData);
             }
+#endif
         }
     }
 
