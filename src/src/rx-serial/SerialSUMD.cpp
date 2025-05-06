@@ -171,6 +171,26 @@ void SerialSUMD3::queueMSPFrameTransmission(uint8_t* data) {
                     }
                 }
             }
+            else if (cmd == 0x09) { // Set4M
+                const uint8_t count = data[7];
+                for(uint8_t i = 0; i < count; ++i) {
+                    const uint8_t swAddress = data[8 + 3 * i];
+                    const uint16_t sw = (data[9 + 3 * i] << 8) + data[10 + 3 * i];
+                    if ((swAddress >= minAddress) && (swAddress <= maxAddress)) {
+                        const uint8_t swGroup = swAddress - minAddress;
+                        for(uint8_t k = 0; k < 8; ++k) {
+                            const bool on = (((sw >> (2 * k)) & 0b11) > 0);
+                            const uint8_t mask = (1 << k);
+                            if (on) {
+                                mSwitches[swGroup] |= mask;
+                            }
+                            else {
+                                mSwitches[swGroup] &= ~mask;
+                            }
+                        }
+                    }
+                }
+            }
             else if (cmd == 0x08) { // set64
                 const uint8_t swAddress = data[7];
                 const uint8_t swGroup = (data[8] & 0x07);
