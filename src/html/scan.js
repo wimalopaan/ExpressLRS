@@ -385,7 +385,7 @@ function updateConfig(data, options) {
       _('rcvr-uart-baud').value = options['rcvr-uart-baud'];
       _('sbus-config').style.display = 'none';
     }
-    else if (proto === 2 || proto === 3 || proto === 5) { // SBUS (and inverted) or DJI-RS Pro
+    else if (proto === 2 || proto === 3 || proto === 6) { // SBUS (and inverted) or DJI-RS Pro
       _('rcvr-uart-baud').disabled = true;
       _('rcvr-uart-baud').value = '100000';
       _('sbus-config').style.display = 'block';
@@ -396,7 +396,12 @@ function updateConfig(data, options) {
       _('rcvr-uart-baud').value = '115200';
       _('sbus-config').style.display = 'none';
     }
-    else if (proto === 6) { // HoTT
+    else if (proto === 5) { // SUMDV3
+      _('rcvr-uart-baud').disabled = true;
+      _('rcvr-uart-baud').value = '115200';
+      _('sbus-config').style.display = 'none';
+    }
+    else if (proto === 7) { // HoTT
       _('rcvr-uart-baud').disabled = true;
       _('rcvr-uart-baud').value = '19200';
       _('sbus-config').style.display = 'none';
