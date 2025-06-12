@@ -59,12 +59,11 @@ typedef enum : uint8_t
     CRSF_FRAMETYPE_BATTERY_SENSOR = 0x08,
     CRSF_FRAMETYPE_BARO_ALTITUDE = 0x09,
     CRSF_FRAMETYPE_AIRSPEED = 0x0A,
+    CRSF_FRAMETYPE_HEARTBEAT = 0x0B,
     CRSF_FRAMETYPE_RPM = 0x0C,
     CRSF_FRAMETYPE_TEMP = 0x0D,
     CRSF_FRAMETYPE_CELLS = 0x0E,
     CRSF_FRAMETYPE_LINK_STATISTICS = 0x14,
-    CRSF_FRAMETYPE_OPENTX_SYNC = 0x10,
-    CRSF_FRAMETYPE_RADIO_ID = 0x3A,
     CRSF_FRAMETYPE_RC_CHANNELS_PACKED = 0x16,
     CRSF_FRAMETYPE_ATTITUDE = 0x1E,
     CRSF_FRAMETYPE_FLIGHT_MODE = 0x21,
@@ -74,10 +73,11 @@ typedef enum : uint8_t
     CRSF_FRAMETYPE_PARAMETER_SETTINGS_ENTRY = 0x2B,
     CRSF_FRAMETYPE_PARAMETER_READ = 0x2C,
     CRSF_FRAMETYPE_PARAMETER_WRITE = 0x2D,
-
     //CRSF_FRAMETYPE_ELRS_STATUS = 0x2E, ELRS good/bad packet count and status flags
 
     CRSF_FRAMETYPE_COMMAND = 0x32,
+    CRSF_FRAMETYPE_HANDSET = 0x3A,
+
     // KISS frames
     CRSF_FRAMETYPE_KISS_REQ  = 0x78,
     CRSF_FRAMETYPE_KISS_RESP = 0x79,
@@ -95,7 +95,8 @@ typedef enum : uint8_t {
 
 typedef enum : uint8_t {
     CRSF_COMMAND_SUBCMD_RX_BIND = 0x01,
-    CRSF_COMMAND_MODEL_SELECT_ID = 0x05
+    CRSF_COMMAND_MODEL_SELECT_ID = 0x05,
+    CRSF_HANDSET_SUBCMD_TIMING = 0x10,
 } crsf_subcommand_e;
 
 enum {
@@ -161,6 +162,7 @@ typedef struct crsf_header_s
     uint8_t device_addr; // from crsf_addr_e
     uint8_t frame_size;  // counts size after this byte, so it must be the payload size + 2 (type and crc)
     crsf_frame_type_e type;
+    uint8_t payload[0];
 } PACKED crsf_header_t;
 
 #define CRSF_MK_FRAME_T(payload) struct payload##_frame_s { crsf_header_t h; payload p; uint8_t crc; } PACKED
@@ -432,7 +434,6 @@ enum {
     CRSF_FRAME_BARO_ALTITUDE_PAYLOAD_SIZE = sizeof(crsf_sensor_baro_vario_t),
     CRSF_FRAME_BATTERY_SENSOR_PAYLOAD_SIZE = sizeof(crsf_sensor_battery_t),
     CRSF_FRAME_ATTITUDE_PAYLOAD_SIZE = sizeof(crsf_sensor_attitude_t),
-    CRSF_FRAME_DEVICE_INFO_PAYLOAD_SIZE = (CRSF_PAYLOAD_SIZE_MAX - CRSF_FRAME_LENGTH_EXT_TYPE_CRC),
     CRSF_FRAME_FLIGHT_MODE_PAYLOAD_SIZE = sizeof(crsf_flight_mode_t),
     CRSF_FRAME_AIRSPEED_PAYLOAD_SIZE = sizeof(crsf_sensor_airspeed_t),
     CRSF_FRAME_RPM_PAYLOAD_SIZE = sizeof(crsf_sensor_rpm_t),
