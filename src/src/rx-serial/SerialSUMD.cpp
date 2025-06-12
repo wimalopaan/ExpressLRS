@@ -135,6 +135,7 @@ void SerialSUMD3::queueMSPFrameTransmission(uint8_t* data) {
     const uint8_t cmd = data[6];
     if ((srcAddress == 0xea) && (destAddress >= 0xc0) && (destAddress <= 0xcf)) {
         if (realm == 0xa1) { // switch
+            DBGLN("SUMDV3 Realm SW: cmd: %d", cmd);
             if (cmd == 0x01) { // set
                 const uint8_t swAddress = data[7];
                 const uint16_t sw = data[8];
@@ -176,15 +177,18 @@ void SerialSUMD3::queueMSPFrameTransmission(uint8_t* data) {
                 for(uint8_t i = 0; i < count; ++i) {
                     const uint8_t swAddress = data[8 + 3 * i];
                     const uint16_t sw = (data[9 + 3 * i] << 8) + data[10 + 3 * i];
+                    DBGLN("SUMDV3 Set4M: cnt: %d, adr: %d, v: %d", count, swAddress, sw);
                     if ((swAddress >= minAddress) && (swAddress <= maxAddress)) {
                         const uint8_t swGroup = swAddress - minAddress;
                         for(uint8_t k = 0; k < 8; ++k) {
                             const bool on = (((sw >> (2 * k)) & 0b11) > 0);
                             const uint8_t mask = (1 << k);
                             if (on) {
+                                DBGLN("SUMDV3 Set4M on: gr: %d, m: %d", swGroup, mask);
                                 mSwitches[swGroup] |= mask;
                             }
                             else {
+                                DBGLN("SUMDV3 Set4M off: gr: %d, m: %d", swGroup, mask);
                                 mSwitches[swGroup] &= ~mask;
                             }
                         }
