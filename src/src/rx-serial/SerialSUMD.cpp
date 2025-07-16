@@ -128,6 +128,8 @@ uint32_t SerialSUMD3::sendRCFrame(const bool frameAvailable, const bool frameMis
     return SUMD_CALLBACK_INTERVAL_MS;
 }
 
+// todo: process non-standard channel 17-32 CRSF command packets
+
 void SerialSUMD3::queueMSPFrameTransmission(uint8_t* data) {
     const uint8_t destAddress = data[3];
     const uint8_t srcAddress = data[4];
@@ -217,6 +219,8 @@ void SerialSUMD3::queueMSPFrameTransmission(uint8_t* data) {
     }
 }
 
+// todo: fix using non-existent channelData[] elements
+//       use additional CH17-32 instead (non-standard)
 void SerialSUMD3::composeFrame(const uint8_t fCode, const uint32_t* const channelData, uint8_t* const data) {
     uint8_t i = 3;
     if (fCode == 0x02) {
