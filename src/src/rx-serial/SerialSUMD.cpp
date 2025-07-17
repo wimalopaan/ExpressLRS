@@ -128,9 +128,7 @@ uint32_t SerialSUMD3::sendRCFrame(const bool frameAvailable, const bool frameMis
     return SUMD_CALLBACK_INTERVAL_MS;
 }
 
-// todo: process non-standard channel 17-32 CRSF command packets
-
-void SerialSUMD3::queueMSPFrameTransmission(uint8_t* data) {
+void SerialSUMD3::queueMSPFrameTransmission(uint8_t* const data) {
     const uint8_t destAddress = data[3];
     const uint8_t srcAddress = data[4];
     const uint8_t realm = data[5];
@@ -216,11 +214,20 @@ void SerialSUMD3::queueMSPFrameTransmission(uint8_t* data) {
                 }
             }
         }
+        else if (realm == 0xa0) { // cruise controller
+            DBGLN("SUMDV3 Realm CC: cmd: %d", cmd);
+            if (cmd == 0x03) { // 16 channels as 8-bit
+                for(uint8_t i = 0; i < 16; ++i) {
+                    const int8_t ch8bit = data[7 + i];
+                    const uint16_t crsfValue = (int32_t(ch8bit) * ((CRSF_CHANNEL_VALUE_MAX - CRSF_CHANNEL_VALUE_MIN) / 2)) / 127 + CRSF_CHANNEL_VALUE_MID; 
+                    mChannels[i] = (CRSF_to_US(crsfValue) << 3); 
+                    DBGLN("SUMDV3 Ch %d -> %d", crsfValue, mChannels[i]);
+                }
+            }
+        }
     }
 }
 
-// todo: fix using non-existent channelData[] elements
-//       use additional CH17-32 instead (non-standard)
 void SerialSUMD3::composeFrame(const uint8_t fCode, const uint32_t* const channelData, uint8_t* const data) {
     uint8_t i = 3;
     if (fCode == 0x02) {
@@ -236,8 +243,8 @@ void SerialSUMD3::composeFrame(const uint8_t fCode, const uint32_t* const channe
             data[i++] = us >> 8;
             data[i++] = us & 0x00ff;
         }
-        for(uint8_t c = 17; c < 24; c++) {
-            const uint16_t us = (CRSF_to_US(channelData[c]) << 3);
+        for(uint8_t c = 16; c < 24; c++) {
+            const uint16_t us = (CRSF_to_US(mChannels[c - 16]) << 3);
             data[i++] = us >> 8;
             data[i++] = us & 0x00ff;
         }
@@ -248,8 +255,8 @@ void SerialSUMD3::composeFrame(const uint8_t fCode, const uint32_t* const channe
             data[i++] = us >> 8;
             data[i++] = us & 0x00ff;
         }
-        for(uint8_t c = 25; c < 32; ++c) {
-            const uint16_t us = (CRSF_to_US(channelData[c]) << 3);
+        for(uint8_t c = 24; c < 32; ++c) {
+            const uint16_t us = (CRSF_to_US(mChannels[c - 24]) << 3);
             data[i++] = us >> 8;
             data[i++] = us & 0x00ff;
         }
