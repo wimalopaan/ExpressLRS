@@ -38,4 +38,5 @@ private:
     const uint8_t maxAddress = minAddress + 8 - 1;
     State state = State::CH1_16;
     std::array<uint8_t, 8> mSwitches{};
+    std::array<uint16_t, 16> mChannels{};
 };
