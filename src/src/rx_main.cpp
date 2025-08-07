@@ -1293,6 +1293,9 @@ void MspReceiveComplete()
             (receivedHeader->dest_addr == CRSF_ADDRESS_BROADCAST || receivedHeader->dest_addr == CRSF_ADDRESS_FLIGHT_CONTROLLER))
         {
             serialIO->queueMSPFrameTransmission(MspData);
+#if defined(PLATFORM_ESP32)
+            serial1IO->queueMSPFrameTransmission(MspData);
+#endif
         }
     }
 
