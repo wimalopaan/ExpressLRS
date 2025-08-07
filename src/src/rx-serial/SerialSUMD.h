@@ -39,4 +39,5 @@ private:
     State state = State::CH1_16;
     std::array<uint8_t, 8> mSwitches{};
     std::array<uint16_t, 16> mChannels{};
+    uint8_t mFlags{};
 };

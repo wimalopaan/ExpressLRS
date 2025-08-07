@@ -217,11 +217,17 @@ void SerialSUMD3::queueMSPFrameTransmission(uint8_t* const data) {
         else if (realm == 0xa0) { // cruise controller
             DBGLN("SUMDV3 Realm CC: cmd: %d", cmd);
             if (cmd == 0x03) { // 16 channels as 8-bit
+                mFlags = 0;
                 for(uint8_t i = 0; i < 16; ++i) {
                     const int8_t ch8bit = data[7 + i];
-                    const uint16_t crsfValue = (int32_t(ch8bit) * ((CRSF_CHANNEL_VALUE_MAX - CRSF_CHANNEL_VALUE_MIN) / 2)) / 127 + CRSF_CHANNEL_VALUE_MID; 
-                    mChannels[i] = (CRSF_to_US(crsfValue) << 3); 
-                    DBGLN("SUMDV3 Ch %d -> %d", crsfValue, mChannels[i]);
+                    mChannels[i] = (int32_t(ch8bit) * ((CRSF_CHANNEL_VALUE_MAX - CRSF_CHANNEL_VALUE_MIN) / 2)) / 127 + CRSF_CHANNEL_VALUE_MID; 
+                }
+            }
+            else if (cmd == 0x04) { // flags, 16 channels as 8-bit
+                mFlags = data[7];
+                for(uint8_t i = 0; i < 16; ++i) {
+                    const int8_t ch8bit = data[8 + i];
+                    mChannels[i] = (int32_t(ch8bit) * ((CRSF_CHANNEL_VALUE_MAX - CRSF_CHANNEL_VALUE_MIN) / 2)) / 127 + CRSF_CHANNEL_VALUE_MID; 
                 }
             }
         }
@@ -232,40 +238,84 @@ void SerialSUMD3::composeFrame(const uint8_t fCode, const uint32_t* const channe
     uint8_t i = 3;
     if (fCode == 0x02) {
         for(uint8_t c = 0; c < 16; c++) {
-            const uint16_t us = (CRSF_to_US(channelData[c]) << 3);
-            data[i++] = us >> 8;
-            data[i++] = us & 0x00ff;
+            if (mFlags & 0b10) {
+                const uint16_t us = (CRSF_to_US(mChannels[c]) << 3);
+                data[i++] = us >> 8;
+                data[i++] = us & 0x00ff;
+            }
+            else {
+                const uint16_t us = (CRSF_to_US(channelData[c]) << 3);
+                data[i++] = us >> 8;
+                data[i++] = us & 0x00ff;
+            }
         }
     }
     else if (fCode == 0x03) {
-        for(uint8_t c = 0; c < 8; c++) {
-            const uint16_t us = (CRSF_to_US(channelData[c]) << 3);
-            data[i++] = us >> 8;
-            data[i++] = us & 0x00ff;
+        if (mFlags & 0b10) {
+            for(uint8_t c = 0; c < 8; c++) {
+                const uint16_t us = (CRSF_to_US(mChannels[c]) << 3);
+                data[i++] = us >> 8;
+                data[i++] = us & 0x00ff;
+            }
+            for(uint8_t c = 16; c < 24; c++) {
+                const uint16_t us = (CRSF_to_US(channelData[c - 16]) << 3);
+                data[i++] = us >> 8;
+                data[i++] = us & 0x00ff;
+            }
         }
-        for(uint8_t c = 16; c < 24; c++) {
-            const uint16_t us = (CRSF_to_US(mChannels[c - 16]) << 3);
-            data[i++] = us >> 8;
-            data[i++] = us & 0x00ff;
+        else {
+            for(uint8_t c = 0; c < 8; c++) {
+                const uint16_t us = (CRSF_to_US(channelData[c]) << 3);
+                data[i++] = us >> 8;
+                data[i++] = us & 0x00ff;
+            }
+            for(uint8_t c = 16; c < 24; c++) {
+                const uint16_t us = (CRSF_to_US(mChannels[c - 16]) << 3);
+                data[i++] = us >> 8;
+                data[i++] = us & 0x00ff;
+            }
         }
     }
     else if (fCode == 0x04) {
-        for(uint8_t c = 0; c < 8; ++c) {
-            const uint16_t us = (CRSF_to_US(channelData[c]) << 3);
-            data[i++] = us >> 8;
-            data[i++] = us & 0x00ff;
+        if (mFlags & 0b10) {
+            for(uint8_t c = 0; c < 8; ++c) {
+                const uint16_t us = (CRSF_to_US(mChannels[c]) << 3);
+                data[i++] = us >> 8;
+                data[i++] = us & 0x00ff;
+            }
+            for(uint8_t c = 24; c < 32; ++c) {
+                const uint16_t us = (CRSF_to_US(channelData[c - 24]) << 3);
+                data[i++] = us >> 8;
+                data[i++] = us & 0x00ff;
+            }
         }
-        for(uint8_t c = 24; c < 32; ++c) {
-            const uint16_t us = (CRSF_to_US(mChannels[c - 24]) << 3);
-            data[i++] = us >> 8;
-            data[i++] = us & 0x00ff;
+        else {
+            for(uint8_t c = 0; c < 8; ++c) {
+                const uint16_t us = (CRSF_to_US(channelData[c]) << 3);
+                data[i++] = us >> 8;
+                data[i++] = us & 0x00ff;
+            }
+            for(uint8_t c = 24; c < 32; ++c) {
+                const uint16_t us = (CRSF_to_US(mChannels[c - 24]) << 3);
+                data[i++] = us >> 8;
+                data[i++] = us & 0x00ff;
+            }
         }
     }
     else if (fCode == 0x05) {
-        for(uint8_t c = 0; c < 12; ++c) {
-            const uint16_t us = (CRSF_to_US(channelData[c]) << 3);
-            data[i++] = us >> 8;
-            data[i++] = us & 0x00ff;
+        if (mFlags & 0b10) {
+            for(uint8_t c = 0; c < 12; ++c) {
+                const uint16_t us = (CRSF_to_US(mChannels[c]) << 3);
+                data[i++] = us >> 8;
+                data[i++] = us & 0x00ff;
+            }
+        }
+        else {
+            for(uint8_t c = 0; c < 12; ++c) {
+                const uint16_t us = (CRSF_to_US(channelData[c]) << 3);
+                data[i++] = us >> 8;
+                data[i++] = us & 0x00ff;
+            }
         }
         data[i++] = mSwitches[1];
         data[i++] = mSwitches[0];
