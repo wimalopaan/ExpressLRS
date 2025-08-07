@@ -10,11 +10,14 @@ public:
     ~SerialSBUS() override = default;
 
     void queueLinkStatisticsPacket() override {}
-    void queueMSPFrameTransmission(uint8_t* data) override {}
+    void queueMSPFrameTransmission(uint8_t* data) override;
     uint32_t sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t *channelData) override;
 
 private:
     void processBytes(uint8_t *bytes, uint16_t size) override {};
 
     Stream *streamOut;
+
+    uint8_t mFlags{}; // [x x x x x x sd su ], su: sbus output upper channels; sd: sumdv3 flip upper lower channels
+    std::array<uint16_t, 16> mChannels{};
 };
