@@ -58,22 +58,42 @@ uint32_t SerialSBUS::sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t
     }
     else
     {
-        PackedRCdataOut.ch0 = channelData[0];
-        PackedRCdataOut.ch1 = channelData[1];
-        PackedRCdataOut.ch2 = channelData[2];
-        PackedRCdataOut.ch3 = channelData[3];
-        PackedRCdataOut.ch4 = channelData[4];
-        PackedRCdataOut.ch5 = channelData[5];
-        PackedRCdataOut.ch6 = channelData[6];
-        PackedRCdataOut.ch7 = channelData[7];
-        PackedRCdataOut.ch8 = channelData[8];
-        PackedRCdataOut.ch9 = channelData[9];
-        PackedRCdataOut.ch10 = channelData[10];
-        PackedRCdataOut.ch11 = channelData[11];
-        PackedRCdataOut.ch12 = channelData[12];
-        PackedRCdataOut.ch13 = channelData[13];
-        PackedRCdataOut.ch14 = channelData[14];
-        PackedRCdataOut.ch15 = channelData[15];
+        if (mFlags & 0b01) { // output upper channels
+            PackedRCdataOut.ch0 = mChannels[0];
+            PackedRCdataOut.ch1 = mChannels[1];
+            PackedRCdataOut.ch2 = mChannels[2];
+            PackedRCdataOut.ch3 = mChannels[3];
+            PackedRCdataOut.ch4 = mChannels[4];
+            PackedRCdataOut.ch5 = mChannels[5];
+            PackedRCdataOut.ch6 = mChannels[6];
+            PackedRCdataOut.ch7 = mChannels[7];
+            PackedRCdataOut.ch8 = mChannels[8];
+            PackedRCdataOut.ch9 = mChannels[9];
+            PackedRCdataOut.ch10 = mChannels[10];
+            PackedRCdataOut.ch11 = mChannels[11];
+            PackedRCdataOut.ch12 = mChannels[12];
+            PackedRCdataOut.ch13 = mChannels[13];
+            PackedRCdataOut.ch14 = mChannels[14];
+            PackedRCdataOut.ch15 = mChannels[15];
+        }
+        else {
+            PackedRCdataOut.ch0 = channelData[0];
+            PackedRCdataOut.ch1 = channelData[1];
+            PackedRCdataOut.ch2 = channelData[2];
+            PackedRCdataOut.ch3 = channelData[3];
+            PackedRCdataOut.ch4 = channelData[4];
+            PackedRCdataOut.ch5 = channelData[5];
+            PackedRCdataOut.ch6 = channelData[6];
+            PackedRCdataOut.ch7 = channelData[7];
+            PackedRCdataOut.ch8 = channelData[8];
+            PackedRCdataOut.ch9 = channelData[9];
+            PackedRCdataOut.ch10 = channelData[10];
+            PackedRCdataOut.ch11 = channelData[11];
+            PackedRCdataOut.ch12 = channelData[12];
+            PackedRCdataOut.ch13 = channelData[13];
+            PackedRCdataOut.ch14 = channelData[14];
+            PackedRCdataOut.ch15 = channelData[15];
+        }
     }
 
     uint8_t extraData = 0;
@@ -85,6 +105,27 @@ uint32_t SerialSBUS::sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t
     _outputPort->write((uint8_t)extraData);    // ch 17, 18, lost packet, failsafe
     _outputPort->write((uint8_t)0x00);    // FOOTER
     return SBUS_CALLBACK_INTERVAL_MS;
+}
+
+void SerialSBUS::queueMSPFrameTransmission(uint8_t* const data) {
+    const uint8_t destAddress = data[3];
+    const uint8_t srcAddress = data[4];
+    const uint8_t realm = data[5];
+    const uint8_t cmd = data[6];
+    if ((srcAddress == 0xea) && (destAddress >= 0xc0) && (destAddress <= 0xcf)) {
+        if (realm == 0xa0) { // cruise controller
+            DBGLN("SBUS Realm CC: cmd: %d %d", cmd, mFlags);
+            if (cmd == 0x04) { // flags, 16 channels as 8-bit
+                mFlags = data[7];
+                for(uint8_t i = 0; i < 16; ++i) {
+                    const int8_t ch8bit = data[8 + i];
+                    const uint16_t crsfValue = (int32_t(ch8bit) * ((CRSF_CHANNEL_VALUE_MAX - CRSF_CHANNEL_VALUE_MIN) / 2)) / 127 + CRSF_CHANNEL_VALUE_MID; 
+                    mChannels[i] = (CRSF_to_US(crsfValue) << 3); 
+                    DBGLN("SBUS UCh %d -> %d", i, crsfValue);
+                }
+            }
+        }
+    }
 }
 
 #endif
