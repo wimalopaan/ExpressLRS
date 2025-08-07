@@ -112,17 +112,17 @@ void SerialSBUS::queueMSPFrameTransmission(uint8_t* const data) {
     const uint8_t srcAddress = data[4];
     const uint8_t realm = data[5];
     const uint8_t cmd = data[6];
-    DBGLN("SBUS msp: %d %d", cmd, mFlags);
     if ((srcAddress == 0xea) && (destAddress >= 0xc0) && (destAddress <= 0xcf)) {
         if (realm == 0xa0) { // cruise controller
             DBGLN("SBUS Realm CC: cmd: %d %d", cmd, mFlags);
-            if (cmd == 0x04) { // flags, 16 channels as 8-bit
+            if (cmd == 0x03) {
+                mFlags = 0; // normal channel order
+            }
+            else if (cmd == 0x04) { // flags, 16 channels as 8-bit
                 mFlags = data[7];
                 for(uint8_t i = 0; i < 16; ++i) {
                     const int8_t ch8bit = data[8 + i];
-                    const uint16_t crsfValue = (int32_t(ch8bit) * ((CRSF_CHANNEL_VALUE_MAX - CRSF_CHANNEL_VALUE_MIN) / 2)) / 127 + CRSF_CHANNEL_VALUE_MID; 
-                    mChannels[i] = (CRSF_to_US(crsfValue) << 3); 
-                    DBGLN("SBUS UCh %d -> %d", i, crsfValue);
+                    mChannels[i] = (int32_t(ch8bit) * ((CRSF_CHANNEL_VALUE_MAX - CRSF_CHANNEL_VALUE_MIN) / 2)) / 127 + CRSF_CHANNEL_VALUE_MID; 
                 }
             }
         }
