@@ -108,6 +108,9 @@ uint32_t SerialSBUS::sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t
 }
 
 void SerialSBUS::queueMSPFrameTransmission(uint8_t* const data) {
+#if defined(PLATFORM_ESP32)
+    extern Stream* serial1_protocol_tx;
+#endif
     const uint8_t destAddress = data[3];
     const uint8_t srcAddress = data[4];
     const uint8_t realm = data[5];
@@ -119,7 +122,13 @@ void SerialSBUS::queueMSPFrameTransmission(uint8_t* const data) {
                 mFlags = 0; // normal channel order
             }
             else if (cmd == 0x04) { // flags, 16 channels as 8-bit
+#if defined(PLATFORM_ESP32)
+                if (streamOut == serial1_protocol_tx) { // only for Serial2
+                    mFlags = data[7];
+                }
+#else
                 mFlags = data[7];
+#endif
                 for(uint8_t i = 0; i < 16; ++i) {
                     const int8_t ch8bit = data[8 + i];
                     mChannels[i] = (int32_t(ch8bit) * ((CRSF_CHANNEL_VALUE_MAX - CRSF_CHANNEL_VALUE_MIN) / 2)) / 127 + CRSF_CHANNEL_VALUE_MID; 
