@@ -7,10 +7,14 @@
 #include "logging.h"
 #include "rxtx_intf.h"
 
+#include "../../src/rx_switch.h"
+
 static int8_t servoPins[PWM_MAX_CHANNELS];
 static pwm_channel_t pwmChannels[PWM_MAX_CHANNELS];
 static uint16_t pwmChannelValues[PWM_MAX_CHANNELS];
 static bool initialized = false;
+
+static bool mswState[PWM_MAX_CHANNELS];
 
 #if (defined(PLATFORM_ESP32))
 static DShotRMT *dshotInstances[PWM_MAX_CHANNELS] = {nullptr};
@@ -65,20 +69,32 @@ static void servoWrite(uint8_t ch, uint16_t us)
     }
     else
 #endif
-    if (servoPins[ch] != UNDEF_PIN && pwmChannelValues[ch] != us)
     {
-        pwmChannelValues[ch] = us;
-        if ((eServoOutputMode)chConfig->val.mode == somOnOff)
+        const bool pwmChanged = (pwmChannelValues[ch] != us); 
+        const bool mswChanged = (mswState[ch] != MultiSwitch::state(ch));
+        const bool changed = pwmChanged || mswChanged;
+        if (servoPins[ch] != UNDEF_PIN && changed)
         {
-            digitalWrite(servoPins[ch], us > 1500);
-        }
-        else if ((eServoOutputMode)chConfig->val.mode == som10KHzDuty)
-        {
-            PWM.setDuty(pwmChannels[ch], constrain(us, 1000, 2000) - 1000);
-        }
-        else
-        {
-            PWM.setMicroseconds(pwmChannels[ch], us / (chConfig->val.narrow + 1));
+            pwmChannelValues[ch] = us;
+            mswState[ch] = MultiSwitch::state(ch);
+            if ((eServoOutputMode)chConfig->val.mode == somOnOff)
+            {
+                if (MultiSwitch::hasData()) {
+                    const bool swState = MultiSwitch::state(ch);
+                    digitalWrite(servoPins[ch], swState);
+                }
+                else {
+                    digitalWrite(servoPins[ch], us > 1500);
+                }
+            }
+            else if ((eServoOutputMode)chConfig->val.mode == som10KHzDuty)
+            {
+                PWM.setDuty(pwmChannels[ch], constrain(us, 1000, 2000) - 1000);
+            }
+            else
+            {
+                PWM.setMicroseconds(pwmChannels[ch], us / (chConfig->val.narrow + 1));
+            }
         }
     }
 }
