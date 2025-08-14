@@ -48,6 +48,8 @@
 #include "esp_task_wdt.h"
 #endif
 
+#include "rx_switch.h"
+
 //
 // Code encapsulated by the ARDUINO_CORE_INVERT_FIX #ifdef temporarily fixes EpressLRS issue #2609 which is caused
 // by the Arduino core (see https://github.com/espressif/arduino-esp32/issues/9896) and fixed
@@ -1298,6 +1300,7 @@ void MspReceiveComplete()
                 serial1IO->queueMSPFrameTransmission(MspData);
             }
 #endif
+            MultiSwitch::decode(MspData);
         }
     }
 
