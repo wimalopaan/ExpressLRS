@@ -6,7 +6,17 @@
 
 const uint8_t MultiSwitch::minAddress = 240;
 const uint8_t MultiSwitch::maxAddress = minAddress + 8 - 1;
-std::array<uint8_t, 8> MultiSwitch::mSwitches{};
+const uint8_t MultiSwitch::minLedAddress = maxAddress + 1;
+const uint8_t MultiSwitch::maxLedAddress = minLedAddress + 8 - 1;
+MultiSwitch::switches_t MultiSwitch::mSwitches{};
+MultiSwitch::switches_t MultiSwitch::mLeds{};
+MultiSwitch::ledColor_t MultiSwitch::mLedColors = []{
+    MultiSwitch::ledColor_t cc{};
+    for(auto& c : cc) {
+        c = (0 << 16) + (32 << 8) + (0 << 0);
+    }
+    return cc;
+}();
 bool MultiSwitch::mHasData = false;
 
 bool MultiSwitch::hasData() {
@@ -23,6 +33,20 @@ bool MultiSwitch::state(const uint8_t sw) {
     }
     return false;
 }
+bool MultiSwitch::ledState(const uint8_t led) {
+    if (led < 64) {
+        const uint8_t lidx = led / 8;
+        const uint8_t lbit = led % 8;
+        return (mLeds[lidx] & (1 << lbit));
+    }
+    return false;
+}
+uint32_t MultiSwitch::ledColor(const uint8_t led) {
+    if (led < mLedColors.size()) {
+        return mLedColors[led];
+    }
+    return 0;
+}
 void MultiSwitch::decode(const uint8_t* const data) {
     const uint8_t destAddress = data[3];
     const uint8_t srcAddress = data[4];
@@ -34,7 +58,6 @@ void MultiSwitch::decode(const uint8_t* const data) {
             if (cmd == 0x01) { // set
                 const uint8_t swAddress = data[7];
                 const uint16_t sw = data[8];
-                DBGLN("MSW Set: adr: %d, v: %d", swAddress, sw);
                 if ((swAddress >= minAddress) && (swAddress <= maxAddress)) {
                     mHasData = true;
                     const uint8_t group = swAddress - minAddress;
@@ -46,6 +69,20 @@ void MultiSwitch::decode(const uint8_t* const data) {
                         }
                         else {
                             mSwitches[group] &= ~mask;
+                        }
+                    }
+                }
+                else if ((swAddress >= minLedAddress) && (swAddress <= maxLedAddress)) {
+                    mHasData = true;
+                    const uint8_t group = swAddress - minLedAddress;
+                    for(uint8_t i = 0; i < 8; ++i) {
+                        const bool on = (((sw >> i) & 0b01) > 0);
+                        const uint8_t mask = (1 << i);
+                        if (on) {
+                            mLeds[group] |= mask;
+                        }
+                        else {
+                            mLeds[group] &= ~mask;
                         }
                     }
                 }
@@ -70,6 +107,22 @@ void MultiSwitch::decode(const uint8_t* const data) {
                         }
                     }
                 }
+                else if ((swAddress >= minLedAddress) && (swAddress <= maxLedAddress)) {
+                    mHasData = true;
+                    const uint8_t group = swAddress - minLedAddress;
+                    for(uint8_t i = 0; i < 8; ++i) {
+                        const bool on = (((sw >> (2 * i)) & 0b11) > 0);
+                        const uint8_t mask = (1 << i);
+                        if (on) {
+                            DBGLN("MSW Set4 led on:", i);
+                            mLeds[group] |= mask;
+                        }
+                        else {
+                            DBGLN("MSW Set4 led off:", i);
+                            mLeds[group] &= ~mask;
+                        }
+                    }
+                }
             }
             else if (cmd == 0x09) { // Set4M
                 const uint8_t count = data[7];
@@ -88,6 +141,20 @@ void MultiSwitch::decode(const uint8_t* const data) {
                             }
                             else {
                                 mSwitches[swGroup] &= ~mask;
+                            }
+                        }
+                    }
+                    else if ((swAddress >= minLedAddress) && (swAddress <= maxLedAddress)) {
+                        mHasData = true;
+                        const uint8_t swGroup = swAddress - minLedAddress;
+                        for(uint8_t k = 0; k < 8; ++k) {
+                            const bool on = (((sw >> (2 * k)) & 0b11) > 0);
+                            const uint8_t mask = (1 << k);
+                            if (on) {
+                                mLeds[swGroup] |= mask;
+                            }
+                            else {
+                                mLeds[swGroup] &= ~mask;
                             }
                         }
                     }
