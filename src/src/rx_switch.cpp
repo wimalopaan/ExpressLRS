@@ -60,7 +60,7 @@ void MultiSwitch::decode(const uint8_t* const data) {
                 const uint16_t sw = data[8];
                 if ((swAddress >= minAddress) && (swAddress <= maxAddress)) {
                     mHasData = true;
-                    const uint8_t group = swAddress - minAddress;
+                    const uint8_t group = (swAddress - minAddress) & 0x07;
                     for(uint8_t i = 0; i < 8; ++i) {
                         const bool on = (((sw >> i) & 0b01) > 0);
                         const uint8_t mask = (1 << i);
@@ -74,7 +74,7 @@ void MultiSwitch::decode(const uint8_t* const data) {
                 }
                 else if ((swAddress >= minLedAddress) && (swAddress <= maxLedAddress)) {
                     mHasData = true;
-                    const uint8_t group = swAddress - minLedAddress;
+                    const uint8_t group = (swAddress - minLedAddress) & 0x07;
                     for(uint8_t i = 0; i < 8; ++i) {
                         const bool on = (((sw >> i) & 0b01) > 0);
                         const uint8_t mask = (1 << i);
@@ -93,7 +93,7 @@ void MultiSwitch::decode(const uint8_t* const data) {
                 DBGLN("MSW Set4: adr: %d, v: %d", swAddress, sw);
                 if ((swAddress >= minAddress) && (swAddress <= maxAddress)) {
                     mHasData = true;
-                    const uint8_t group = swAddress - minAddress;
+                    const uint8_t group = (swAddress - minAddress) & 0x07;
                     for(uint8_t i = 0; i < 8; ++i) {
                         const bool on = (((sw >> (2 * i)) & 0b11) > 0);
                         const uint8_t mask = (1 << i);
@@ -109,7 +109,7 @@ void MultiSwitch::decode(const uint8_t* const data) {
                 }
                 else if ((swAddress >= minLedAddress) && (swAddress <= maxLedAddress)) {
                     mHasData = true;
-                    const uint8_t group = swAddress - minLedAddress;
+                    const uint8_t group = (swAddress - minLedAddress) & 0x07;
                     for(uint8_t i = 0; i < 8; ++i) {
                         const bool on = (((sw >> (2 * i)) & 0b11) > 0);
                         const uint8_t mask = (1 << i);
@@ -132,7 +132,7 @@ void MultiSwitch::decode(const uint8_t* const data) {
                     DBGLN("MSW Set4M: cnt: %d, adr: %d, v: %d", count, swAddress, sw);
                     if ((swAddress >= minAddress) && (swAddress <= maxAddress)) {
                         mHasData = true;
-                        const uint8_t swGroup = swAddress - minAddress;
+                        const uint8_t swGroup = (swAddress - minAddress) & 0x07;
                         for(uint8_t k = 0; k < 8; ++k) {
                             const bool on = (((sw >> (2 * k)) & 0b11) > 0);
                             const uint8_t mask = (1 << k);
@@ -146,7 +146,7 @@ void MultiSwitch::decode(const uint8_t* const data) {
                     }
                     else if ((swAddress >= minLedAddress) && (swAddress <= maxLedAddress)) {
                         mHasData = true;
-                        const uint8_t swGroup = swAddress - minLedAddress;
+                        const uint8_t swGroup = (swAddress - minLedAddress) & 0x07;
                         for(uint8_t k = 0; k < 8; ++k) {
                             const bool on = (((sw >> (2 * k)) & 0b11) > 0);
                             const uint8_t mask = (1 << k);
@@ -176,6 +176,23 @@ void MultiSwitch::decode(const uint8_t* const data) {
                         else {
                             mSwitches[swGroup] &= ~mask;
                         }
+                    }
+                }
+            }
+            else if (cmd == 0x0a) { // setRGB
+                const uint8_t swAddress = data[7];
+                const uint8_t count = data[8];
+                if ((swAddress >= minLedAddress) && (swAddress <= maxLedAddress) && (count <= 8)) {
+                    mHasData = true;
+                    const uint8_t swGroup = (swAddress - minLedAddress) & 0x07;;
+                    for(uint8_t i = 0; i < count; ++i) {
+                        const uint8_t out = (data[9 + 2 * i] >> 4) & 0x07;
+                        const uint32_t r = ((data[9 + 2 * i]) & 0x0f) << 4;
+                        const uint32_t g = ((data[10 + 2 * i] >> 4) & 0x0f) << 4;
+                        const uint32_t b = ((data[10 + 2 * i]) & 0x0f) << 4;
+                        const uint32_t color = (r << 16) + (g << 8) + b;
+                        DBGLN("MSW SetRGB: out: %d, r: %d, g: %d, b: %d", out, r, g, b);
+                        mLedColors[swGroup * 8 + out] = color;
                     }
                 }
             }
