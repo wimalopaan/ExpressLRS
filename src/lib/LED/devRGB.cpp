@@ -3,6 +3,8 @@
 #include "devLED.h"
 #include "config.h"
 
+#include "../../src/rx_switch.h"
+
 #ifdef HAS_RGB
 
 #ifdef WS2812_IS_GRB
@@ -95,15 +97,27 @@ void WS281BsetLED(int index, uint32_t color)
 
 void WS281BsetLED(uint32_t color)
 {
-    for (int i=0 ; i<statusLEDcount ; i++)
-    {
+    if (MultiSwitch::hasData()) {
         if (OPT_WS2812_IS_GRB)
         {
-            stripgrb->SetPixelColor(statusLEDs[i], RgbColor(color >> 16, color >> 8, color));
+            stripgrb->SetPixelColor(statusLEDs[0], RgbColor(color >> 16, color >> 8, color));
         }
         else
         {
-            striprgb->SetPixelColor(statusLEDs[i], RgbColor(color >> 16, color >> 8, color));
+            striprgb->SetPixelColor(statusLEDs[0], RgbColor(color >> 16, color >> 8, color));
+        }
+    }
+    else {
+        for (int i=0 ; i<statusLEDcount ; i++)
+        {
+            if (OPT_WS2812_IS_GRB)
+            {
+                stripgrb->SetPixelColor(statusLEDs[i], RgbColor(color >> 16, color >> 8, color));
+            }
+            else
+            {
+                striprgb->SetPixelColor(statusLEDs[i], RgbColor(color >> 16, color >> 8, color));
+            }
         }
     }
     if (OPT_WS2812_IS_GRB)
@@ -113,6 +127,20 @@ void WS281BsetLED(uint32_t color)
     else
     {
         striprgb->Show();
+    }
+}
+void updateSwitchLeds() {
+    for (int i=1 ; i<statusLEDcount ; i++)
+    {
+       const uint32_t color = MultiSwitch::ledState(i - 1) ? MultiSwitch::ledColor(i - 1) : 0;
+        if (OPT_WS2812_IS_GRB)
+        {
+            stripgrb->SetPixelColor(statusLEDs[i], RgbColor(color >> 16, color >> 8, color));
+        }
+        else
+        {
+            striprgb->SetPixelColor(statusLEDs[i], RgbColor(color >> 16, color >> 8, color));
+        }
     }
 }
 #endif
@@ -466,8 +494,16 @@ static int timeout()
         // Set the color and we're done!
         blinkyColor.h = ExpressLRS_currAirRate_Modparams->index * 256 / RATE_MAX;
         blinkyColor.v = fmap(POWERMGNT::currPower(), 0, PWR_COUNT-1, 10, 128);
+        #if defined(TARGET_RX)
+        if (MultiSwitch::hasData()) {
+            updateSwitchLeds();
+        }
+        WS281BsetLED(HsvToRgb(blinkyColor));
+        return NORMAL_UPDATE_INTERVAL;
+        #else
         WS281BsetLED(HsvToRgb(blinkyColor));
         return DURATION_NEVER;
+        #endif
     case tentative:
         // Set the color and we're done!
         blinkyColor.h = ExpressLRS_currAirRate_Modparams->index * 256 / RATE_MAX;
