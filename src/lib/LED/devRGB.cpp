@@ -495,14 +495,14 @@ static int timeout()
         blinkyColor.h = ExpressLRS_currAirRate_Modparams->index * 256 / RATE_MAX;
         blinkyColor.v = fmap(POWERMGNT::currPower(), 0, PWR_COUNT-1, 10, 128);
         #if defined(TARGET_RX)
-        if (MultiSwitch::hasData()) {
-            updateSwitchLeds();
-        }
-        WS281BsetLED(HsvToRgb(blinkyColor));
-        return NORMAL_UPDATE_INTERVAL;
+            if (MultiSwitch::hasData()) {
+                updateSwitchLeds();
+            }
+            WS281BsetLED(HsvToRgb(blinkyColor));
+            return (2 * NORMAL_UPDATE_INTERVAL);
         #else
-        WS281BsetLED(HsvToRgb(blinkyColor));
-        return DURATION_NEVER;
+            WS281BsetLED(HsvToRgb(blinkyColor));
+            return DURATION_NEVER;
         #endif
     case tentative:
         // Set the color and we're done!
