@@ -1302,7 +1302,6 @@ void MspReceiveComplete()
 #endif
             MultiSwitch::decode(MspData);
             serial1IO->queueMSPFrameTransmission(MspData);
-#endif
         }
     }
 
