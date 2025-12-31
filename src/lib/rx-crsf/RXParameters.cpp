@@ -1,3 +1,5 @@
+#if defined(TARGET_RX)
+
 #include "targets.h"
 #if !defined(UNIT_TEST)
 #include "RXEndpoint.h"
@@ -682,4 +684,6 @@ void RXEndpoint::updateParameters()
     LUA_FIELD_HIDE(luaTargetSysId)
   }
 }
+#endif
+
 #endif
