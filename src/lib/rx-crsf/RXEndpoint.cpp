@@ -57,6 +57,11 @@ void RXEndpoint::handleMessage(const crsf_header_t *message)
     {
         EnterBindingModeSafely();
     }
+#if defined(WMEXTENSION) && defined(TARGET_RX)
+    else if (message->type == CRSF_FRAMETYPE_COMMAND && ((extMessage->payload[0] == CRSF_COMMAND_SWITCH) || (extMessage->payload[0] == CRSF_COMMAND_CC))) {
+        msw.decode((const uint8_t*)(&extMessage->payload[0]));
+    }   
+#endif
 #if defined(PLATFORM_ESP32)
     else if (message->type == CRSF_FRAMETYPE_MSP_RESP)
     {
@@ -84,5 +89,11 @@ void RXEndpoint::handleMessage(const crsf_header_t *message)
             extMessage->payload + 1  // start of parameter payload
         );
     }
+}
+#endif
+
+#if defined(WMEXTENSION) && defined(TARGET_RX)
+const MultiSwitch& RXEndpoint::multiSwitch() const {
+    return msw;
 }
 #endif
