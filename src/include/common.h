@@ -270,6 +270,10 @@ enum eAuxChannels : uint8_t
     CRSF_NUM_CHANNELS = 16
 };
 
+#if defined(WMEXTENSION)
+#define CRSF_EXTRA_CHANNELS 16
+#endif
+
 #ifndef UNIT_TEST
 #if defined(RADIO_SX127X)
 #define RATE_MAX 6
@@ -307,7 +311,12 @@ extern bool InBindingMode;
 extern uint8_t ExpressLRS_currTlmDenom;
 extern expresslrs_mod_settings_s *ExpressLRS_currAirRate_Modparams;
 extern expresslrs_rf_pref_params_s *ExpressLRS_currAirRate_RFperfParams;
-extern uint32_t ChannelData[CRSF_NUM_CHANNELS]; // Current state of channels, CRSF format
+
+#if defined(WMEXTENSION)
+extern uint32_t ChannelData[CRSF_NUM_CHANNELS + CRSF_EXTRA_CHANNELS];
+#else
+extern uint32_t ChannelData[CRSF_NUM_CHANNELS];
+#endif
 
 extern connectionState_e connectionState;
 #if !defined(UNIT_TEST)
