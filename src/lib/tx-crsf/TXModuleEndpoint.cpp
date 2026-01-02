@@ -33,6 +33,13 @@ bool TXModuleEndpoint::handleRaw(const crsf_header_t *message)
         RcPacketToChannelsData(message);
         return true;    // do NOT forward channel data via CRSF, as we have 'magic' OTA encoding
     }
+#if defined(WMEXTENSION) && defined(WMCRSF_CHAN_EXT)
+    else if (message->type == CRSF_FRAMETYPE_RC_CHANNELS_EXTENDED)
+    {
+        RcPacketToChannelsData(message, 16);
+        return true;    // do NOT forward channel data via CRSF, as we have 'magic' OTA encoding
+    }
+#endif
     return false;
 }
 
@@ -84,6 +91,78 @@ void TXModuleEndpoint::handleMessage(const crsf_header_t *message)
     }
 }
 
+#if defined (WMCRSF_CHAN_EXT)
+void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message, const uint8_t offset) // data is packed as 11 bits per channel
+{
+    const auto payload = (uint8_t *)message + sizeof(crsf_header_t);
+    constexpr unsigned srcBits = 11;
+    constexpr unsigned dstBits = 11;
+    constexpr unsigned inputChannelMask = (1 << srcBits) - 1;
+    constexpr unsigned precisionShift = dstBits - srcBits;
+
+    uint32_t localChannelData[CRSF_NUM_CHANNELS];
+
+           // code from BetaFlight rx/crsf.cpp / bitpacker_unpack
+    uint8_t bitsMerged = 0;
+    uint32_t readValue = 0;
+    unsigned readByteIndex = 0;
+    for (uint32_t & n : localChannelData)
+    {
+        while (bitsMerged < srcBits)
+        {
+            const uint8_t readByte = payload[readByteIndex++];
+            readValue |= ((uint32_t) readByte) << bitsMerged;
+            bitsMerged += 8;
+        }
+        //printf("rv=%x(%x) bm=%u\n", readValue, (readValue & inputChannelMask), bitsMerged);
+        n = (readValue & inputChannelMask) << precisionShift;
+        readValue >>= srcBits;
+        bitsMerged -= srcBits;
+    }
+
+    handset->PerformChannelOverrides(localChannelData, CRSF_NUM_CHANNELS, offset);
+
+    //
+    // sends channel data and also communicates commanded armed status in arming mode Switch.
+    // frame len 24 -> arming mode CH5: use channel 5 value
+    // frame len 25 -> use status byte for arming mode, commanded arming status
+    //
+    // ARMMODE_CH5 | ARMED | Meaning
+    //      0      |   0   | Arm using Switch, not armed
+    //      0      |   1   | Arm using Switch, is armed
+    //      1      |   x   | Arm using CH5, armed/not armed depending on CH5 value
+    //
+
+    if (message->frame_size == CRSF_FRAME_SIZE(sizeof(crsf_channels_t)))
+    {
+        armCmd = CRSF_to_BIT(localChannelData[AUX1]);       // no status byte present, us CH5 to arm
+    }
+    else
+    {
+        const uint8_t status = payload[readByteIndex];
+        if (status & CRSF_CHANNELS_STATUS_ARMING_MODE_CH5)
+        {
+            armCmd = CRSF_to_BIT(localChannelData[AUX1]);   // status byte present and Arm using CH5 selected
+        }
+        else
+        {
+            armCmd = status & CRSF_CHANNELS_STATUS_ARMED;   // status byte present and Arm using Switch selected
+        }
+    }
+
+    // monitoring arming state
+    if (lastArmCmd != armCmd)
+    {
+        handset->SetArmed(armCmd);
+        lastArmCmd = armCmd;
+#if defined(PLATFORM_ESP32)
+        devicesTriggerEvent(EVENT_ARM_FLAG_CHANGED);
+#endif
+    }
+
+    handset->RCDataReceived(localChannelData, CRSF_NUM_CHANNELS, offset);
+}
+#else
 void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message) // data is packed as 11 bits per channel
 {
     const auto payload = (uint8_t *)message + sizeof(crsf_header_t);
@@ -94,7 +173,7 @@ void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message) // d
 
     uint32_t localChannelData[CRSF_NUM_CHANNELS];
 
-    // code from BetaFlight rx/crsf.cpp / bitpacker_unpack
+           // code from BetaFlight rx/crsf.cpp / bitpacker_unpack
     uint8_t bitsMerged = 0;
     uint32_t readValue = 0;
     unsigned readByteIndex = 0;
@@ -154,3 +233,4 @@ void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message) // d
 
     handset->RCDataReceived(localChannelData, CRSF_NUM_CHANNELS);
 }
+#endif
