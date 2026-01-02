@@ -14,6 +14,20 @@ public:
 private:
     void luaparamMappingChannelOut(propertiesCommon *item, uint8_t arg);
     void luaparamSetFailsafe(propertiesCommon *item, uint8_t arg);
+
+#if defined(HAS_GYRO)
+    void luaparamGyroCalibrate(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroSubtrims(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroInputChannel(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroOutputChannel(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroOutputMode(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroOutputInverted(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroGainAxis(propertiesCommon *item, uint8_t arg);
+
+
+
+#endif
+
 };
 
 #endif //RX_ENDPOINT_H

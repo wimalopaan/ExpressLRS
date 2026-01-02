@@ -2,6 +2,7 @@
 #include "config_legacy.h"
 #include "common.h"
 #include "device.h"
+#include "gyro.h"
 #include "POWERMGNT.h"
 #include "OTA.h"
 #include "helpers.h"
@@ -815,6 +816,30 @@ void RxConfig::Load()
     if (version == RX_CONFIG_VERSION)
     {
         CheckUpdateFlashedUid(false);
+        #if defined(DEBUG_LOG)
+        DBGVLN("Limits:");
+        for (uint8_t i = 0; i < PWM_MAX_CHANNELS; i++)
+        {
+            const rx_config_pwm_limits_t *limits = GetPwmChannelLimits(i);
+            DBGVLN("Channel %d: %d - %d", i, limits->val.min, limits->val.max);
+        }
+        DBGVLN("Active mixes:");
+        for (unsigned mix_number = 0; mix_number < MAX_MIXES; mix_number++)
+        {
+            const rx_config_mix_t *mix = config.GetMix(mix_number);
+            if (!mix->val.active)
+                continue;
+
+            DBGVLN("Mix %d: source %d destination %d wlow %d whigh %d offset %d",
+                mix_number,
+                (uint8_t) mix->val.source,
+                (uint8_t) mix->val.destination,
+                (int8_t) mix->val.weight_negative,
+                (int8_t) mix->val.weight_positive,
+                (uint16_t) mix->val.offset
+            );
+        }
+        #endif
         return;
     }
 
@@ -1035,8 +1060,15 @@ void RxConfig::UpgradeEepromV9V10(uint8_t ver)
         CONFCOPY(targetSysId);
         CONFCOPY(sourceSysId);
     }
-    for (unsigned ch=0; ch<16; ++ch)
+    for (unsigned ch=0; ch<16; ++ch){
         PwmConfigV9(&old.pwmChannels[ch], &m_config.pwmChannels[ch]);
+	
+        #if defined(HAS_GYRO)
+		// PWM limits were introduced in v12, set sane defaults
+	    m_config.pwmLimits[ch].val.min = 885; // allow extended range
+	    m_config.pwmLimits[ch].val.max = 2135; // allow extended range
+        #endif
+	}
 }
 
 /**
@@ -1242,12 +1274,29 @@ RxConfig::SetDefaults(bool commit)
             {
                 mode = somSerial1TX;
             }
+		#if defined(HAS_GYRO)
+		// ??? SetPwmChannel(ch, 1500, ch, false, mode, false);
+        SetPwmChannelLimits(ch, 885, 2135);
+        SetGyroChannel(ch, 0, 0, 0);
+        #endif
 #endif
         }
         const uint16_t failsafe = ch == 2 ? CHANNEL_VALUE_FS_US_ELIMITS_MIN - CHANNEL_VALUE_FS_US_MIN :
                                             CHANNEL_VALUE_FS_US_MID - CHANNEL_VALUE_FS_US_MIN; // ch2 is throttle, failsafe it to 880
         SetPwmChannel(ch, failsafe, ch, false, mode, false);
     }
+#if defined(HAS_GYRO)
+    SetGyroSAFEPitch(45);
+    SetGyroSAFERoll(45);
+    SetGyroLevelPitch(60);
+    SetGyroLevelRoll(60);
+    SetGyroLaunchAngle(10);
+    SetGyroHoverStrength(8);
+    
+    // Configure a mix from each input channel to each output channel
+    for (unsigned int ch=0; ch<CRSF_NUM_CHANNELS; ch++)
+        SetMixer(ch, (mix_source_t) ch, (mix_destination_t) ch, (int8_t) 100, 100, 0, true);
+#endif
 
     m_config.teamraceChannel = AUX7; // CH11
 
@@ -1268,6 +1317,268 @@ RxConfig::SetStorageProvider(ELRS_EEPROM *eeprom)
         m_eeprom = eeprom;
     }
 }
+
+#if defined(HAS_GYRO)
+
+void
+RxConfig::debugGyroConfiguration()
+{
+    DBGLN("Gyro configuration:");
+    for (uint8_t ch = 0; ch < PWM_MAX_CHANNELS; ch++)
+    {
+        rx_config_gyro_channel_t *config = &m_config.gyroChannels[ch];
+        if (config->val.input_mode == FN_IN_NONE && config->val.output_mode == FN_NONE)
+            continue;
+        DBGLN("CH%d: In=%d,Out=%d,%s",
+              ch, config->val.input_mode, config->val.output_mode, config->val.inverted ? "inverted" : "");
+    }
+}
+
+void
+RxConfig::SetGyroChannel(uint8_t ch, uint8_t input_mode, uint8_t output_mode, bool inverted)
+{
+    if (ch > PWM_MAX_CHANNELS)
+        return;
+
+    rx_config_gyro_channel_t *config = &m_config.gyroChannels[ch];
+    rx_config_gyro_channel_t newConfig;
+    newConfig.val.input_mode = input_mode;
+    newConfig.val.output_mode = output_mode;
+    newConfig.val.inverted = inverted;
+
+    if (config->raw == newConfig.raw)
+        return;
+
+    config->raw = newConfig.raw;
+    debugGyroConfiguration();
+    m_modified = EVENT_CONFIG_GYRO_CHANGED;
+}
+
+void
+RxConfig::SetGyroChannelRaw(uint8_t ch, uint32_t raw)
+{
+    if (ch > PWM_MAX_CHANNELS)
+        return;
+
+    rx_config_gyro_channel_t *config = &m_config.gyroChannels[ch];
+    if (config->raw == raw)
+        return;
+
+    config->raw = raw;
+    m_modified = EVENT_CONFIG_GYRO_CHANGED;
+    debugGyroConfiguration();
+}
+
+void
+RxConfig::SetGyroModePos(uint8_t pos, gyro_mode_t mode)
+{
+    if (pos > 4)
+        return;
+
+    rx_config_gyro_mode_pos_t *modes = &m_config.gyroModes;
+    rx_config_gyro_mode_pos_t newModes;
+    newModes.raw = modes->raw;
+
+    switch (pos)
+    {
+    case 0:
+        newModes.val.pos1 = mode;
+        break;
+    case 1:
+        newModes.val.pos2 = mode;
+        break;
+    case 2:
+        newModes.val.pos3 = mode;
+        break;
+    case 3:
+        newModes.val.pos4 = mode;
+        break;
+    case 4:
+        newModes.val.pos5 = mode;
+        break;
+    }
+    if (modes->raw == newModes.raw)
+        return;
+
+    modes->raw = newModes.raw;
+    m_modified = EVENT_CONFIG_GYRO_CHANGED;
+}
+
+/**
+ * Return the first channel matching input `mode` or -1 if not found.
+*/
+const int8_t RxConfig::GetGyroInputChannelNumber(gyro_input_channel_function_t mode)
+{
+    for (int8_t i = 0; i < GYRO_MAX_CHANNELS; i++)
+        if (GetGyroChannelInputMode(i) == mode)
+            return i;
+    return -1;
+}
+
+/**
+ * Return the first channel matching output `mode` or -1 if not found.
+*/
+const int8_t RxConfig::GetGyroOutputChannelNumber(gyro_output_channel_function_t mode)
+{
+    for (uint8_t i = 0; i < GYRO_MAX_CHANNELS; i++)
+        if (GetGyroChannelOutputMode(i) == mode)
+            return i;
+    return -1;
+}
+
+void
+RxConfig::SetGyroPIDRate(gyro_axis_t axis, gyro_rate_variable_t var, uint8_t new_value)
+{
+    rx_config_gyro_gains_t *config = &m_config.gyroGains[axis];
+
+    uint8_t old_value = 0;
+    switch (var)
+    {
+    case GYRO_RATE_VARIABLE_P:
+        old_value = config->p;
+        break;
+    case GYRO_RATE_VARIABLE_I:
+        old_value = config->i;
+        break;
+    case GYRO_RATE_VARIABLE_D:
+        old_value = config->d;
+        break;
+    }
+
+    if (new_value == old_value)
+        return;
+
+    switch (var)
+    {
+    case GYRO_RATE_VARIABLE_P:
+        config->p = new_value;
+        break;
+    case GYRO_RATE_VARIABLE_I:
+        config->i = new_value;
+        break;
+    case GYRO_RATE_VARIABLE_D:
+        config->d = new_value;
+        break;
+    }
+
+    m_modified = EVENT_CONFIG_GYRO_CHANGED;
+    gyro.reload();
+    debugGyroConfiguration();
+}
+
+void
+RxConfig::SetGyroPIDGain(gyro_axis_t axis, uint8_t new_value)
+{
+    rx_config_gyro_gains_t *config = &m_config.gyroGains[axis];
+
+    if (config->gain == new_value)
+        return;
+
+    config->gain = new_value;
+    m_modified = EVENT_CONFIG_GYRO_CHANGED;
+    gyro.reload();
+    debugGyroConfiguration();
+}
+
+void
+RxConfig::SetGyroSensorAlignment(gyro_sensor_align_t newAlignment)
+{
+    if (m_config.gyroSensorAlignment != newAlignment) {
+        m_config.gyroSensorAlignment = newAlignment;
+        m_modified = EVENT_CONFIG_GYRO_CHANGED;
+    }
+}
+
+void
+RxConfig::SetCalibrateGyro(bool value)
+{
+    if (m_config.calibrateGyro != value) {
+        m_config.calibrateGyro = value;
+        m_modified = EVENT_CONFIG_GYRO_CHANGED;
+    }
+}
+
+void
+RxConfig::SetGyroLaunchAngle(uint8_t angle)
+{
+    if (m_config.gyroLaunchAngle != angle) {
+        m_config.gyroLaunchAngle = angle;
+        m_modified = EVENT_CONFIG_GYRO_CHANGED;
+        gyro.reload();
+    }
+}
+
+void
+RxConfig::SetGyroSAFEPitch(uint8_t angle)
+{
+    if (m_config.gyroSAFEPitch != angle) {
+        m_config.gyroSAFEPitch = angle;
+        m_modified = EVENT_CONFIG_GYRO_CHANGED;
+        gyro.reload();
+    }
+}
+
+void
+RxConfig::SetGyroSAFERoll(uint8_t angle)
+{
+    if (m_config.gyroSAFERoll != angle) {
+        m_config.gyroSAFERoll = angle;
+        m_modified = EVENT_CONFIG_GYRO_CHANGED;
+        gyro.reload();
+    }
+}
+
+void
+RxConfig::SetGyroLevelPitch(uint8_t angle)
+{
+    if (m_config.gyroLevelPitch != angle) {
+        m_config.gyroLevelPitch = angle;
+        m_modified = EVENT_CONFIG_GYRO_CHANGED;
+        gyro.reload();
+    }
+}
+
+void
+RxConfig::SetGyroLevelRoll(uint8_t angle)
+{
+    if (m_config.gyroLevelRoll != angle) {
+        m_config.gyroLevelRoll = angle;
+        m_modified = EVENT_CONFIG_GYRO_CHANGED;
+        gyro.reload();
+    }
+}
+
+void
+RxConfig::SetGyroHoverStrength(uint8_t strength)
+{
+    if (m_config.gyroHoverStrength != strength) {
+        m_config.gyroHoverStrength = strength;
+        m_modified = EVENT_CONFIG_GYRO_CHANGED;
+        gyro.reload();
+    }
+}
+
+void
+RxConfig::SetAccelCalibration(uint16_t x, uint16_t y, uint16_t z)
+{
+    rx_config_gyro_calibration_t *accel = &m_config.accelCalibration;
+    accel->x = x;
+    accel->y = y;
+    accel->z = z;
+    m_modified = EVENT_CONFIG_GYRO_CHANGED;
+}
+
+void
+RxConfig::SetGyroCalibration(uint16_t x, uint16_t y, uint16_t z)
+{
+    rx_config_gyro_calibration_t *gyro = &m_config.gyroCalibration;
+    gyro->x = x;
+    gyro->y = y;
+    gyro->z = z;
+    m_modified = EVENT_CONFIG_GYRO_CHANGED;
+}
+
+#endif // HAS_GYRO
 
 void
 RxConfig::SetPwmChannel(uint8_t ch, uint16_t failsafe, uint8_t inputCh, bool inverted, uint8_t mode, uint8_t stretched)
@@ -1302,6 +1613,109 @@ RxConfig::SetPwmChannelRaw(uint8_t ch, uint32_t raw)
     pwm->raw = raw;
     m_modified = EVENT_CONFIG_PWM_CHANGE;
 }
+
+#if defined(HAS_GYRO)
+void
+RxConfig::SetPwmChannelLimits(uint8_t ch, uint16_t min, uint16_t max)
+{
+    DBGLN("*** Store PWM limits ch %d min %d max %d", ch, min, max);
+    if (ch > PWM_MAX_CHANNELS)
+        return;
+
+    rx_config_pwm_limits_t *limits = &m_config.pwmLimits[ch];
+    rx_config_pwm_limits_t new_limits;
+    new_limits.val.min = min;
+    new_limits.val.max = max;
+
+    if (limits->raw == new_limits.raw)
+        return;
+
+    limits->raw = new_limits.raw;
+    m_modified = EVENT_CONFIG_GYRO_CHANGED;
+}
+
+void
+RxConfig::SetPwmChannelLimitsRaw(uint8_t ch, uint32_t raw)
+{
+    DBGLN("*** Store PWM limits");
+    if (ch > PWM_MAX_CHANNELS)
+        return;
+
+    rx_config_pwm_limits_t *pwm = &m_config.pwmLimits[ch];
+    if (pwm->raw == raw)
+        return;
+
+    pwm->raw = raw;
+    DBGLN("*** Stored new PWM Limits for channel %d: Min: %d Max: %d\n",
+          ch, (uint16_t) pwm->val.min, (uint16_t) pwm->val.max);
+    m_modified = EVENT_CONFIG_GYRO_CHANGED;
+}
+
+void
+RxConfig::SetMixer(uint8_t mixNumber, mix_source_t source, mix_destination_t destination, int8_t weight_negative, int8_t weight_positive, uint16_t offset, bool active) {
+    if (mixNumber > MAX_MIXES)
+        return;
+
+    rx_config_mix_t *mix = &m_config.mixes[mixNumber];
+    rx_config_mix_t new_mix;
+    new_mix.raw = mix->raw;
+
+    new_mix.val.source = source;
+    new_mix.val.destination = destination;
+    new_mix.val.weight_negative = weight_negative;
+    new_mix.val.weight_positive = weight_positive;
+    new_mix.val.offset = offset;
+    new_mix.val.active = active;
+
+    if (new_mix.raw == mix->raw)
+        return;
+
+    mix->raw = new_mix.raw;
+    m_modified = EVENT_CONFIG_GYRO_CHANGED;
+}
+
+void
+RxConfig::SetMixerRaw(uint8_t mixNumber, uint64_t raw)
+{
+    if (mixNumber > MAX_MIXES)
+        return;
+
+    rx_config_mix_t *mix = &m_config.mixes[mixNumber];
+
+    rx_config_mix_t nmix;
+    nmix.raw = raw;
+
+    // for(;i<size*8;++i){
+    //     // print last bit and shift left.
+    //     printf("%u ",num&maxPow ? 1 : 0);
+    //     num = num<<1;
+    // }
+    char line[128];
+    sprintf(
+        line,
+        "A: %d S:%d D:%d N:%d/%d P:%d/%d Offset: %d, Raw: %llu %llu",
+        (uint8_t) nmix.val.active,
+        (uint8_t) nmix.val.source,
+        (uint8_t) nmix.val.destination,
+        (uint8_t) nmix.val.weight_negative,
+        (int8_t) nmix.val.weight_negative,
+        (uint8_t) nmix.val.weight_positive,
+        (int8_t) nmix.val.weight_positive,
+        (uint16_t) nmix.val.offset,
+        raw,
+        nmix.raw
+    );
+    DBGLN("SetMixRaw: %d %s", mixNumber, line);
+
+    if (mix->raw == raw)
+        return;
+
+    mix->raw = raw;
+    m_modified = EVENT_CONFIG_GYRO_CHANGED;
+}
+
+#endif
+
 
 void
 RxConfig::SetForceTlmOff(bool forceTlmOff)

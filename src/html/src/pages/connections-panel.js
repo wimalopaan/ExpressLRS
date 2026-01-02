@@ -56,7 +56,7 @@ class ConnectionsPanel extends LitElement {
                             <table class="pwmtbl mui-table">
                                 <thead>
                                 <tr>
-                                    <th class="fixed-column">Output</th><th class="mui--text-center fixed-column">Features</th><th>Mode</th><th>Input</th><th class="mui--text-center fixed-column">Invert</th><th class="mui--text-center fixed-column">Stretch</th><th class="mui--text-center fixed-column pwmitm">Failsafe Mode</th><th class="mui--text-center fixed-column pwmitm">Failsafe Pos</th>
+                                    <th class="fixed-column">Output</th><th class="mui--text-center fixed-column">Features</th><th>Mode</th><th>Input</th><th class="mui--text-center fixed-column">Invert</th><th class="mui--text-center fixed-column">Stretch</th><th class="mui--text-center fixed-column pwmitm">Failsafe Mode</th><th class="mui--text-center fixed-column pwmitm">Failsafe Pos</th><th>Limit Min</th><th>Limit Max</th>
                                 </tr>
                                 </thead>
                                 <tbody>
@@ -109,6 +109,8 @@ class ConnectionsPanel extends LitElement {
                                 <li>"Last Position" continues sending last received channel position</li>
                             </ul>
                         </li>
+                        <li><b>Limit Min:</b>Gyro: Limit Min</li>
+                        <li><b>Limit Max:</b>Gyro: Limit Max</li>
                     </ul>
                 </div>
             </div>
@@ -202,7 +204,10 @@ class ConnectionsPanel extends LitElement {
                 <td><div class="mui-checkbox mui--text-center"><input type="checkbox" id="pwm_${index}_stretch" ?checked="${stretch}"}></div></td>
                 <td>${this._enumSelectGenerate(`pwm_${index}_fsmode`, failsafeMode, ['Set Position', 'No Pulses', 'Last Position'],
                         (e) => {this._failsafeModeChange(e.target, index)})}</td>
-                <td><div class="mui-textfield compact"><input id="pwm_${index}_fs" value="${failsafe}" size="6" class="pwmitm" /></div></td></tr>
+                <td><div class="mui-textfield compact"><input id="pwm_${index}_fs" value="${failsafe}" size="6" class="pwmitm" /></div></td>
+                <td><div class="mui-textfield compact"><input id="pwm_${index}_limit_min" value="${item.limits.min}" size="6"/></div></td>
+                <td><div class="mui-textfield compact"><input id="pwm_${index}_limit_max" value="${item.limits.max}" size="6"/></div></td>
+                </tr>
             `);
             this.pinModes[index] = mode
         });
@@ -216,6 +221,8 @@ class ConnectionsPanel extends LitElement {
             _(`pwm_${index}_stretch`).disabled = onoff
             _(`pwm_${index}_fs`).disabled = onoff
             _(`pwm_${index}_fsmode`).disabled = onoff
+            _(`pwm_${index}_limit_min`).disabled = onoff;
+            _(`pwm_${index}_limit_max`).disabled = onoff;
         }
 
         // disable extra fields for serial & i2c pins
@@ -297,6 +304,8 @@ class ConnectionsPanel extends LitElement {
             const stretch = _(`pwm_${ch}_stretch`).checked ? 1 : 0
             const failsafeField = _(`pwm_${ch}_fs`)
             const failsafeModeField = _(`pwm_${ch}_fsmode`)
+            const limitMinField = _(`pwm_${ch}_limit_min`);
+            const limitMaxField = _(`pwm_${ch}_limit_max`);
             let failsafe = failsafeField.value
             if (failsafe > 2523) failsafe = 2523;
             if (failsafe < 476) failsafe = 476;
@@ -306,6 +315,7 @@ class ConnectionsPanel extends LitElement {
             const raw = (failsafeMode << 22) | (stretch << 20) | (mode << 16) | (invert << 15) | (inChannel << 11) | (failsafe - 476)
             // console.log(`PWM ${ch} mode=${mode} input=${inChannel} fs=${failsafe} fsmode=${failsafeMode} inv=${invert} stretch=${stretch} raw=${raw}`)
             outData.push(raw)
+            outData.push(limitMinField.value << 16 | limitMaxField.value);
             ++ch
         }
         return outData

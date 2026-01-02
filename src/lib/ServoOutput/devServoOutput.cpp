@@ -7,6 +7,9 @@
 #include "crsf_protocol.h"
 #include "logging.h"
 #include "rxtx_intf.h"
+#if defined(HAS_GYRO)
+#include "gyro.h"
+#endif
 
 static int8_t servoPins[PWM_MAX_CHANNELS];
 static pwm_channel_t pwmChannels[PWM_MAX_CHANNELS];
@@ -145,7 +148,13 @@ static void servosFailsafe()
 
 static void servoCalcAllChannels(servoWrite_fn write)
 {
-    for (int ch = 0 ; ch < GPIO_PIN_PWM_OUTPUTS_COUNT ; ++ch)
+	uint8_t numChannels = GPIO_PIN_PWM_OUTPUTS_COUNT;
+
+    #if defined(HAS_GYRO)
+        numChannels = CRSF_NUM_CHANNELS;
+    #endif
+	
+    for (int ch = 0 ; ch < numChannels ; ++ch)
     {
         const rx_config_pwm_t *chConfig = config.GetPwmChannel(ch);
         const unsigned crsfVal = ChannelData[chConfig->val.inputChannel];
@@ -168,12 +177,28 @@ static void servoCalcAllChannels(servoWrite_fn write)
         {
             us = CRSF_to_US(crsfVal);
         }
+        
+        #if defined(HAS_GYRO)
+        // Mix in gyro adjustments before handling inversion
+        gyro.mixer(ch, &us);
+        
+		if (ch >= GPIO_PIN_PWM_OUTPUTS_COUNT) {
+          continue;
+        }
+        #endif
+        
         // Flip the output around the mid-value if inverted
         // (1500 - usOutput) + 1500
         if (chConfig->val.inverted)
         {
             us = 3000U - us;
         }
+        
+        #if defined(HAS_GYRO)
+        // Limit output values to configured limits
+        const rx_config_pwm_limits_t *limits = config.GetPwmChannelLimits(ch);
+        us = constrain(us, limits->val.min, limits->val.max);
+        #endif 
         write(ch, us);
     } /* for each servo */
 }
