@@ -64,7 +64,7 @@ void PPMHandset::handleInput()
             connected();
         }
 
-#if defined(WMCRSF_CHAN_EXT)
+#if defined(WMEXTENSION) && defined(WMCRSF_CHAN_EXT)
         PerformChannelOverrides(localChannelData, numChannels, 0);
 #else
         PerformChannelOverrides(localChannelData, numChannels);
