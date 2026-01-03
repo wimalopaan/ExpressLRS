@@ -15,6 +15,7 @@ Gyro gyro = Gyro();
 
 static bool initialize()
 {
+    gyro.initialized=false;
     if (!i2c_enabled)
     {
         return false;
@@ -27,6 +28,7 @@ static bool initialize()
         gyro.dev = new GyroDevMPU6050();
         gyro.dev->initialize();
         DBGLN("Detected MPU6050 Gyro");
+        gyro.initialized=true;
     }
 #endif
     return true;

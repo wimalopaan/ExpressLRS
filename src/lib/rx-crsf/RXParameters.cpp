@@ -9,6 +9,7 @@
 #include "logging.h"
 
 #if defined(HAS_GYRO)
+#include "gyro.h"
 extern gyro_event_t gyro_event;
 #endif
 
@@ -232,6 +233,7 @@ void RXEndpoint::luaparamGyroCalibrate(propertiesCommon *item, uint8_t arg)
   {
     // This is generally not seen by the user, since we'll disconnect to commit config
     // and the handset will send another lcdQuery that will overwrite it with idle
+    DBGLN("Calibrating Gyro: Gyro Detected=%s",gyro.initialized?"True":"False");
     newStep = lcsExecuting;
     msg = "Calibrating gyro";
     sendCommandResponse((commandParameter *)item, newStep, msg);

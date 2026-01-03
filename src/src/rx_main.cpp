@@ -40,6 +40,12 @@
 #include "rx-serial/devSerialIO.h"
 
 #include <LittleFS.h>
+
+#ifdef HAS_GYRO
+#include "devGyro.h"
+#include "gyro.h"
+#endif
+
 #if defined(PLATFORM_ESP8266)
 #include <user_interface.h>
 #elif defined(PLATFORM_ESP32)
@@ -86,6 +92,9 @@ device_affinity_t ui_devices[] = {
   {&Button_device, 0},
   {&AnalogVbat_device, 0},
   {&ServoOut_device, 1},
+#ifdef HAS_GYRO
+  {&Gyro_device, 1},
+#endif
   {&Baro_device, 0}, // must come after AnalogVbat_device to slow updates
 #if defined(PLATFORM_ESP32) && !defined(PLATFORM_ESP32_C3)
   {&VTxSPI_device, 0},
