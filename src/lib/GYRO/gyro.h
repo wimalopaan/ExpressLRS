@@ -23,7 +23,7 @@
 #define GYRO_BOOT_JITTER_TIMES 4
 #endif
 
-class  GyroDevice;
+class  MPUDevice;
 
 extern PID pid_roll;
 extern PID pid_pitch;
@@ -32,6 +32,7 @@ extern PID pid_yaw;
 class Gyro
 {
 public:
+    gyro_status_t getStatus();
     gyro_mode_t getMode(void);
     void mixer(uint8_t ch, uint16_t *us);
     void send_telemetry();
@@ -40,7 +41,7 @@ public:
     void calibrate();
     void reload();
 
-    GyroDevice *dev = nullptr;
+    MPUDevice *mpuDev = nullptr;
 
     float master_gain = 1.0;
 // protected:

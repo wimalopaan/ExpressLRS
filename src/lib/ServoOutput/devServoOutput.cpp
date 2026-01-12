@@ -146,7 +146,7 @@ static void servosFailsafe()
     }
 }
 
-static void servoCalcAllChannels(servoWrite_fn write)
+static void servoCalcAllChannels(servoWrite_fn write, bool failSafe=false)
 {
 	uint8_t numChannels = GPIO_PIN_PWM_OUTPUTS_COUNT;
 
@@ -179,8 +179,10 @@ static void servoCalcAllChannels(servoWrite_fn write)
         }
         
         #if defined(HAS_GYRO)
-        // Mix in gyro adjustments before handling inversion
-        gyro.mixer(ch, &us);
+        if (!failSafe) {
+            // Mix in gyro adjustments before handling inversion
+            gyro.mixer(ch, &us);
+        }
         
 		if (ch >= GPIO_PIN_PWM_OUTPUTS_COUNT) {
           continue;
@@ -195,9 +197,11 @@ static void servoCalcAllChannels(servoWrite_fn write)
         }
         
         #if defined(HAS_GYRO)
-        // Limit output values to configured limits
-        const rx_config_pwm_limits_t *limits = config.GetPwmChannelLimits(ch);
-        us = constrain(us, limits->val.min, limits->val.max);
+         if (!failSafe) {
+            // Limit output values to configured limits
+            const rx_config_pwm_limits_t *limits = config.GetPwmChannelLimits(ch);
+            us = constrain(us, limits->val.min, limits->val.max);
+         }
         #endif 
         write(ch, us);
     } /* for each servo */
@@ -214,7 +218,7 @@ static void servoUsToFailsafeConfig(uint8_t ch, uint16_t us)
 
 void servoCurrentToFailsafeConfig()
 {
-    servoCalcAllChannels(&servoUsToFailsafeConfig);
+    servoCalcAllChannels(&servoUsToFailsafeConfig,true);
 }
 
 static void servosUpdate(unsigned long now)
@@ -225,7 +229,7 @@ static void servosUpdate(unsigned long now)
     {
         newChannelsAvailable = false;
         lastUpdate = now;
-        servoCalcAllChannels(&servoWrite);
+        servoCalcAllChannels(&servoWrite, false);
     }     /* if newChannelsAvailable */
 
     // LQ goes to 0 (100 packets missed in a row)

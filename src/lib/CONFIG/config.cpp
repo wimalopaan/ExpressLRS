@@ -1286,12 +1286,15 @@ RxConfig::SetDefaults(bool commit)
         SetPwmChannel(ch, failsafe, ch, false, mode, false);
     }
 #if defined(HAS_GYRO)
+    SetGyroOrientation(6,6); // 6=No orientation Set
+
     SetGyroSAFEPitch(45);
     SetGyroSAFERoll(45);
     SetGyroLevelPitch(60);
     SetGyroLevelRoll(60);
     SetGyroLaunchAngle(10);
     SetGyroHoverStrength(8);
+
     
     // Configure a mix from each input channel to each output channel
     for (unsigned int ch=0; ch<CRSF_NUM_CHANNELS; ch++)
@@ -1462,8 +1465,6 @@ RxConfig::SetGyroPIDRate(gyro_axis_t axis, gyro_rate_variable_t var, uint8_t new
     }
 
     m_modified = EVENT_CONFIG_GYRO_CHANGED;
-    gyro.reload();
-    debugGyroConfiguration();
 }
 
 void
@@ -1476,24 +1477,24 @@ RxConfig::SetGyroPIDGain(gyro_axis_t axis, uint8_t new_value)
 
     config->gain = new_value;
     m_modified = EVENT_CONFIG_GYRO_CHANGED;
-    gyro.reload();
-    debugGyroConfiguration();
 }
 
 void
-RxConfig::SetGyroSensorAlignment(gyro_sensor_align_t newAlignment)
+RxConfig::SetGyroOrientation(uint8_t newOrientationH, uint8_t newOrientationV)
 {
-    if (m_config.gyroSensorAlignment != newAlignment) {
-        m_config.gyroSensorAlignment = newAlignment;
+    if (m_config.gyroOrientationH != newOrientationH ||
+        m_config.gyroOrientationV != newOrientationV) {
+        m_config.gyroOrientationH = newOrientationH;
+        m_config.gyroOrientationV = newOrientationV;
         m_modified = EVENT_CONFIG_GYRO_CHANGED;
     }
 }
 
 void
-RxConfig::SetCalibrateGyro(bool value)
+RxConfig::SetGyroEnabled(bool value)
 {
-    if (m_config.calibrateGyro != value) {
-        m_config.calibrateGyro = value;
+    if (m_config.gyroEnabled != value) {
+        m_config.gyroEnabled = value;
         m_modified = EVENT_CONFIG_GYRO_CHANGED;
     }
 }
@@ -1504,7 +1505,6 @@ RxConfig::SetGyroLaunchAngle(uint8_t angle)
     if (m_config.gyroLaunchAngle != angle) {
         m_config.gyroLaunchAngle = angle;
         m_modified = EVENT_CONFIG_GYRO_CHANGED;
-        gyro.reload();
     }
 }
 
@@ -1514,7 +1514,6 @@ RxConfig::SetGyroSAFEPitch(uint8_t angle)
     if (m_config.gyroSAFEPitch != angle) {
         m_config.gyroSAFEPitch = angle;
         m_modified = EVENT_CONFIG_GYRO_CHANGED;
-        gyro.reload();
     }
 }
 
@@ -1524,7 +1523,6 @@ RxConfig::SetGyroSAFERoll(uint8_t angle)
     if (m_config.gyroSAFERoll != angle) {
         m_config.gyroSAFERoll = angle;
         m_modified = EVENT_CONFIG_GYRO_CHANGED;
-        gyro.reload();
     }
 }
 
@@ -1534,7 +1532,6 @@ RxConfig::SetGyroLevelPitch(uint8_t angle)
     if (m_config.gyroLevelPitch != angle) {
         m_config.gyroLevelPitch = angle;
         m_modified = EVENT_CONFIG_GYRO_CHANGED;
-        gyro.reload();
     }
 }
 
@@ -1544,7 +1541,6 @@ RxConfig::SetGyroLevelRoll(uint8_t angle)
     if (m_config.gyroLevelRoll != angle) {
         m_config.gyroLevelRoll = angle;
         m_modified = EVENT_CONFIG_GYRO_CHANGED;
-        gyro.reload();
     }
 }
 
@@ -1554,7 +1550,6 @@ RxConfig::SetGyroHoverStrength(uint8_t strength)
     if (m_config.gyroHoverStrength != strength) {
         m_config.gyroHoverStrength = strength;
         m_modified = EVENT_CONFIG_GYRO_CHANGED;
-        gyro.reload();
     }
 }
 

@@ -2,7 +2,7 @@
 
 #if defined(HAS_GYRO)
 #include "gyro.h"
-#include "gyro_mpu6050.h"
+#include "mpu_mpu6050.h"
 #include "mixer.h"
 #include "logging.h"
 #include "elrs_eeprom.h" // only needed to satisfy PIO
@@ -21,21 +21,20 @@ static bool initialize()
         return false;
     }
 #ifdef GYRO_DEVICE_MPU6050
-    Wire.setClock(400000);
-    auto mpu = MPU6050();
-    if (mpu.testConnection())
-    {
-        gyro.dev = new GyroDevMPU6050();
-        gyro.dev->initialize();
+    gyro.mpuDev = new MPUDev_MPU6050();
+    bool ret = gyro.mpuDev->initialize();
+    if (ret) {
         DBGLN("Detected MPU6050 Gyro");
-        gyro.initialized=true;
+    } else {
+        DBGLN("MPU6050 Gyro Not Detected");
+        gyro.mpuDev=nullptr;
     }
 #endif
-    return true;
+    return ret;
 }
 
 static bool gyro_detect() {
-    return gyro.dev != nullptr;
+    return gyro.mpuDev != nullptr;
 }
 
 static int start()
@@ -44,16 +43,14 @@ static int start()
         DBGLN("Gyro initialization failed");
         return DURATION_NEVER;
     }
-    gyro.initialized = true;
-    if (config.GetCalibrateGyro()) {
-        gyro.dev->calibrate();
-    }
-    return gyro.dev->start(false);
+    gyro.mpuDev->start();
+    gyro.initialized = gyro.mpuDev->isRunning();
+    return DURATION_IMMEDIATELY; // Call timeout() immediately;
 }
 
 static int timeout()
 {
-    if (gyro.dev->read()) {
+    if (gyro.mpuDev->read()) {
         gyro.last_update = micros();
         gyro.send_telemetry();
     }
@@ -69,16 +66,29 @@ static int event()
 {
     switch (gyro_event)
     {
+    /*    
     case GYRO_EVENT_CALIBRATE:
-        gyro_event = GYRO_EVENT_NONE;
         gyro.dev->calibrate();
         config.SetCalibrateGyro(false);
+        gyro_event = GYRO_EVENT_NONE;
+        break;
+    */
+
+    case GYRO_EVENT_HORIZONTAL_CALIBRATE:
+        gyro.mpuDev->calibrate();
+        gyro.mpuDev->OrientationHorizontalExecute();
+        gyro_event = GYRO_EVENT_NONE;
+        break;
+    case GYRO_EVENT_VERTICAL_CALIBRATE:
+        gyro.mpuDev->OrientationVerticalExecute();
+        gyro.reload();
+        gyro_event = GYRO_EVENT_NONE;
         break;
 
     case GYRO_EVENT_SUBTRIMS:
-        gyro_event = GYRO_EVENT_NONE;
         auto_subtrim_complete = false;
         subtrim_init = 0;
+        gyro_event = GYRO_EVENT_NONE;
         break;
 
     default: ;

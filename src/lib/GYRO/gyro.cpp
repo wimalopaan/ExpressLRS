@@ -6,7 +6,7 @@
 #include "gyro_types.h"
 #include "mixer.h"
 #include "device.h"
-#include "gyro_mpu6050.h"
+#include "mpu_mpu6050.h"
 #include "mode_level.h"
 #include "mode_hover.h"
 #include "mode_rate.h"
@@ -51,9 +51,17 @@ bool boot_jitter(uint16_t *us)
 }
 #endif
 
+gyro_status_t Gyro::getStatus() 
+{
+    if (!config.GetGyroEnabled()) return GYRO_STATUS_OFF;
+    if (mpuDev== nullptr) return GYRO_STATUS_NOT_DETECTED;
+    if (!mpuDev->isRunning()) return GYRO_STATUS_NEED_CALIBRATION; 
+    return GYRO_STATUS_OK;
+}
+
 void Gyro::calibrate()
 {
-    dev->calibrate();
+    //mpuDev->calibrate();
     #ifdef GYRO_BOOT_JITTER
     boot_jitter_times = 0;
     boot_jitter_time = 0;
@@ -85,7 +93,13 @@ void Gyro::detect_mode(uint16_t us)
 */
 void Gyro::reload()
 {
+    initialized = false;
+    if (!config.GetGyroEnabled()) return; //not enabled
+    if (mpuDev== nullptr) return; // No Gyro Detected
+    
     gyro_mode = GYRO_MODE_OFF;
+    mpuDev->start();
+    initialized = mpuDev->isRunning();
 }
 
 void Gyro::switch_mode(gyro_mode_t mode)

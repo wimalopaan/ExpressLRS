@@ -349,9 +349,10 @@ typedef struct __attribute__((packed)) {
     rx_config_gyro_gains_t gyroGains[GYRO_N_AXES]; // PID gains for each axis
     rx_config_gyro_calibration_t accelCalibration;
     rx_config_gyro_calibration_t gyroCalibration;
-    uint8_t gyroSensorAlignment:4,
-            calibrateGyro:1,
-            gyroUnused:3;
+    uint8_t gyroOrientationH:3,
+            gyroOrientationV:3,
+            gyroEnabled:1,
+            gyroUnused:1;
     uint8_t gyroLaunchAngle;
     uint8_t gyroSAFEPitch;
     uint8_t gyroSAFERoll;
@@ -398,8 +399,9 @@ const bool GetPwmChannelInverted(uint8_t ch) const { return m_config.pwmChannels
     const rx_config_gyro_mode_pos_t *GetGyroModePos() const { return &m_config.gyroModes;}
     const int8_t GetGyroInputChannelNumber(gyro_input_channel_function_t mode);
     const int8_t GetGyroOutputChannelNumber(gyro_output_channel_function_t mode);
-    const gyro_sensor_align_t GetGyroSensorAlignment() const { return (gyro_sensor_align_t) m_config.gyroSensorAlignment; }
-    const bool GetCalibrateGyro() const { return m_config.calibrateGyro; }
+    const uint8_t GetGyroOrientationH() const { return m_config.gyroOrientationH; }
+    const uint8_t GetGyroOrientationV() const { return m_config.gyroOrientationV; }    
+    const bool GetGyroEnabled() const { return m_config.gyroEnabled; }
     const rx_config_gyro_calibration_t *GetAccelCalibration() const { return &m_config.accelCalibration; }
     const rx_config_gyro_calibration_t *GetGyroCalibration() const { return &m_config.gyroCalibration; }
     const uint8_t GetGyroLaunchAngle() const { return m_config.gyroLaunchAngle; }
@@ -442,10 +444,12 @@ const bool GetPwmChannelInverted(uint8_t ch) const { return m_config.pwmChannels
     void SetGyroModePos(uint8_t pos, gyro_mode_t mode);
     void SetGyroPIDRate(gyro_axis_t axis, gyro_rate_variable_t var, uint8_t value);
     void SetGyroPIDGain(gyro_axis_t axis, uint8_t value);
-    void SetGyroSensorAlignment(gyro_sensor_align_t);
-    void SetCalibrateGyro(bool);
+
+    void SetGyroEnabled(bool);
     void SetAccelCalibration(uint16_t, uint16_t, uint16_t);
     void SetGyroCalibration(uint16_t, uint16_t, uint16_t);
+    void SetGyroOrientation(uint8_t, uint8_t);
+
     void SetGyroLaunchAngle(uint8_t);
     void SetGyroSAFEPitch(uint8_t);
     void SetGyroSAFERoll(uint8_t);
