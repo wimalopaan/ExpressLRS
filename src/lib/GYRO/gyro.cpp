@@ -5,7 +5,7 @@
 #include "gyro.h"
 #include "gyro_types.h"
 #include "mixer.h"
-#include "device.h"
+//#include "device.h"
 #include "mpu_mpu6050.h"
 #include "mode_level.h"
 #include "mode_hover.h"
@@ -14,9 +14,17 @@
 #include "CRSFRouter.h"
 #include "logging.h"
 
+// Channel Data
+extern uint32_t ChannelData[CRSF_NUM_CHANNELS];
+
+
 PID pid_roll  = PID(1, -1, 0.0, 0.0, 0.0);
 PID pid_pitch = PID(1, -1, 0.0, 0.0, 0.0);
 PID pid_yaw   = PID(1, -1, 0.0, 0.0, 0.0);
+
+#define GYRO_SUBTRIM_INIT_SAMPLES 10
+static uint8_t stick_subtrim_cycles = 0;
+static rx_config_pwm_limits_t temp_limits[PWM_MAX_CHANNELS] = {};
 
 // Must match mixer.h: gyro_input_channel_function_t
 static const char* STR_gyroInputChannelMode[] = {"None","Roll","Pitch","Yaw","Mode","Gain"};
@@ -29,12 +37,14 @@ static const char* STR_gyroAxis[] = {"Roll","Pitch","Yaw"};
 
 volatile gyro_event_t gyro_event = GYRO_EVENT_NONE;
 
-#ifdef GYRO_BOOT_JITTER
-uint8_t boot_jitter_times = 0;
-uint32_t boot_jitter_time = 0;
-int8_t boot_jitter_offset = GYRO_BOOT_JITTER_US;
+static ModeController*  mode_controllers [6] = { };
 
-bool boot_jitter(uint16_t *us)
+#ifdef GYRO_BOOT_JITTER
+static uint8_t boot_jitter_times = 0;
+static uint32_t boot_jitter_time = 0;
+static int8_t boot_jitter_offset = GYRO_BOOT_JITTER_US;
+
+static bool boot_jitter(uint16_t *us)
 {
     if (boot_jitter_times > GYRO_BOOT_JITTER_TIMES)
         return false;
@@ -50,6 +60,19 @@ bool boot_jitter(uint16_t *us)
     return true;
 }
 #endif
+
+void Gyro::init()
+{
+    DBGLN("Gyro:Init()");
+    mode_controllers[GYRO_MODE_OFF] = nullptr;
+    mode_controllers[GYRO_MODE_RATE] = new RateController();
+    mode_controllers[GYRO_MODE_LEVEL] = new LevelController();
+    mode_controllers[GYRO_MODE_LAUNCH] = new LevelController();
+    mode_controllers[GYRO_MODE_SAFE] = new SafeController();
+    mode_controllers[GYRO_MODE_HOVER] = new HoverController();
+
+    mode_controller = nullptr;
+}
 
 gyro_status_t Gyro::getStatus() 
 {
@@ -93,11 +116,13 @@ void Gyro::detect_mode(uint16_t us)
 */
 void Gyro::reload()
 {
+    DBGLN("Gyro:Reload()");
     initialized = false;
     if (!config.GetGyroEnabled()) return; //not enabled
     if (mpuDev== nullptr) return; // No Gyro Detected
     
     gyro_mode = GYRO_MODE_OFF;
+    learn_state = GYRO_LEARN_OFF;
     mpuDev->start();
     initialized = mpuDev->isRunning();
 }
@@ -108,30 +133,10 @@ void Gyro::switch_mode(gyro_mode_t mode)
     DBGLN("Gyro: Master Gain=[%f]", master_gain);
 
     gyro_mode = mode;
-    switch (mode)
-    {
-    case GYRO_MODE_RATE:
-        rate_controller_initialize();
-        break;
+    mode_controller = mode_controllers[mode];
 
-    case GYRO_MODE_LEVEL:
-        level_controller_initialize();
-        break;
-
-    case GYRO_MODE_LAUNCH:
-        level_controller_initialize(config.GetGyroLaunchAngle());
-        break;
-
-    case GYRO_MODE_SAFE:
-        safe_controller_initialize();
-        break;
-
-    case GYRO_MODE_HOVER:
-        hover_controller_initialize();
-        break;
-
-    default:
-        break;
+    if (mode_controller != nullptr) {
+        mode_controller->initialize();
     }
 }
 
@@ -141,6 +146,7 @@ void Gyro::detect_gain(uint16_t us)
     //master_gain = (float(us - GYRO_US_MIN) / (GYRO_US_MAX - GYRO_US_MIN)) * 500;
 }
 
+
 /**
  * Apply gyro servo output mixing and detect gyro mode
  */
@@ -149,10 +155,15 @@ void Gyro::mixer(uint8_t ch, uint16_t *us)
     // We get called before the gyro configuration is initialized
     if (!initialized) return;
 
-    mixer_channel_update(ch, *us);
+    if (learn_state != GYRO_LEARN_OFF) {
+        learn_sticks(ch,*us);
+        return;
+    }
 
-    gyro_output_channel_function_t output_mode = config.GetGyroChannelOutputMode(ch);
-    gyro_input_channel_function_t input_mode = config.GetGyroChannelInputMode(ch);
+
+    auto ch_info = config.GetGyroChannel(ch);
+    auto output_mode = (gyro_output_channel_function_t) ch_info->val.output_mode;
+    auto input_mode = (gyro_input_channel_function_t) ch_info->val.input_mode;
 
     if (input_mode == FN_IN_NONE && output_mode == FN_NONE)
         return;
@@ -181,56 +192,16 @@ void Gyro::mixer(uint8_t ch, uint16_t *us)
     float command = us_command_to_float(ch, *us);
     float correction = 0.0;
 
-    switch (gyro_mode)
-    {
-    case GYRO_MODE_RATE:
-        correction = rate_controller_out(output_mode, command);
-        break;
+     if (mode_controller != nullptr) {
+        correction = mode_controller->out(output_mode, command); 
+        
+        // Gyro specific channel inversion. We might remove this later if not needed.
+        if (ch_info->val.inverted) {
+            correction *= -1;
+        }
 
-    case GYRO_MODE_LEVEL:
-    case GYRO_MODE_LAUNCH:
-        correction = level_controller_out(output_mode, command);
-        break;
-
-    case GYRO_MODE_SAFE:
-        correction = safe_controller_out(output_mode, command);
-        break;
-
-    case GYRO_MODE_HOVER:
-        correction = hover_controller_out(output_mode, command);
-        break;
-
-    default:
-        return;
+        *us = mode_controller->applyCorrection(ch, output_mode, command, correction);
     }
-
-    // Gyro specific channel inversion. We might remove this later if not needed.
-    if (config.GetGyroChannelOutputInverted(ch))
-        correction *= -1;
-
-    switch (gyro_mode)
-    {
-    case GYRO_MODE_RATE:
-    case GYRO_MODE_HOVER:
-        // Limit correction as set from gain input channel
-        correction *= gyro.master_gain;
-
-        // Modulate the correction depending on how much axis stick command
-        correction *= 1 - fabs(command);
-        break;
-
-    case GYRO_MODE_LEVEL:
-    case GYRO_MODE_LAUNCH:
-        // In this mode, the correction is the command
-        *us = float_to_us(ch, correction);
-        return;
-    case GYRO_MODE_SAFE:
-        // In this mode we do not allow the correction to be limited
-    default: ;
-    }
-
-    // Limit of min and max µS values is done in devServoOutput
-    *us = float_to_us(ch, command + correction);
 }
 
 static int16_t decidegrees2Radians10000(int16_t angle_decidegree)
@@ -288,10 +259,13 @@ bool Gyro::read_device()
 }
 */
 
-// #define GYRO_PID_DEBUG_TIME 100
-unsigned long gyro_debug_time = 0;
+#define GYRO_PID_DEBUG_TIME 3000  // Time im Ms
+
+
 
 #ifdef GYRO_PID_DEBUG_TIME
+unsigned long gyro_debug_time = 0;
+
 void _make_gyro_debug_string(PID *pid, char *str) {
     sprintf(str, "Setpoint: %5.2f PV: %5.2f I:%5.2f D:%5.2f Error: %5.2f Out: %5.2f",
         pid->setpoint, pid->pv, pid->Iout, pid->Dout, pid->error, pid->output);
@@ -301,40 +275,31 @@ void _make_gyro_debug_string(PID *pid, char *str) {
 
 void Gyro::tick()
 {
+    if (!initialized) return;
+
+    if (gyro.mpuDev->read()) {
+        gyro.last_update = micros();
+        gyro.send_telemetry();
+    }
+    
     if ((micros() - pid_delay) < 1000 ) return; // ~1k PID loop
     pid_delay = micros();
 
-    switch (gyro_mode)
-    {
-    case GYRO_MODE_RATE:
-        rate_controller_calculate_pid();
-        break;
-
-    case GYRO_MODE_LEVEL:
-    case GYRO_MODE_LAUNCH:
-        level_controller_calculate_pid();
-        break;
-
-    case GYRO_MODE_SAFE:
-        safe_controller_calculate_pid();
-        break;
-
-    case GYRO_MODE_HOVER:
-        hover_controller_calculate_pid();
-        break;
-
-    default:
-        break;
+    if (mode_controller != nullptr) {
+        mode_controller->calculate_pid();
     }
+
 
     #ifdef GYRO_PID_DEBUG_TIME
     if (gyro_mode != GYRO_MODE_OFF &&
         micros() - gyro_debug_time > GYRO_PID_DEBUG_TIME * 1000
     ) {
         DBGLN("MASTER GAIN %f", master_gain);
+        DBGLN("Angles:  Roll:%f Pitch:%f Yaw:%f", radToDeg(gyro.rpy[0]), radToDeg(gyro.rpy[1]), radToDeg(gyro.rpy[2]));
+
         char piddebug[128];
         _make_gyro_debug_string(&pid_pitch, piddebug);
-        DBGLN("\nPID Pitch %s", piddebug);
+        DBGLN("PID Pitch %s", piddebug);
         _make_gyro_debug_string(&pid_roll, piddebug);
         DBGLN("PID Roll  %s", piddebug);
         _make_gyro_debug_string(&pid_yaw, piddebug);
@@ -344,36 +309,98 @@ void Gyro::tick()
     #endif
 }
 
-void configure_pids(float roll_limit, float pitch_limit, float yaw_limit)
-{
-    const rx_config_gyro_gains_t *roll_gains =
-        config.GetGyroGains(GYRO_AXIS_ROLL);
-    const rx_config_gyro_gains_t *pitch_gains =
-        config.GetGyroGains(GYRO_AXIS_PITCH);
-    const rx_config_gyro_gains_t *yaw_gains =
-        config.GetGyroGains(GYRO_AXIS_YAW);
+void Gyro::learn_sticks(uint8_t ch, uint16_t us) {
+    if (learn_state== GYRO_LEARN_SUBTRIMS) {
+        // Set midpoint (subtrim) from an average of a set of samples
+        if (ch == 0 && ++stick_subtrim_cycles > GYRO_SUBTRIM_INIT_SAMPLES) {
+            // Completed
+            learn_state = GYRO_LEARN_OFF;
+            return;
+        }
 
-    configure_pid_gains(&pid_roll, roll_gains, roll_limit, -1.0 * roll_limit);
-    configure_pid_gains(&pid_pitch, pitch_gains, pitch_limit,
-                        -1.0 * pitch_limit);
-    configure_pid_gains(&pid_yaw, yaw_gains, yaw_limit, -1.0 * yaw_limit);
+        // Average over 10 cycles
+        if (stick_subtrim_cycles < GYRO_SUBTRIM_INIT_SAMPLES) {
+            auto ch_limit = &temp_limits[ch];
+            ch_limit->val.mid = (((ch_limit->val.mid * stick_subtrim_cycles) / stick_subtrim_cycles) + us) / 2;
+        }
+    }
+    else 
+    if (learn_state== GYRO_LEARN_LIMIT_START) {
+        auto ch_limit = &temp_limits[ch];
+
+        if (us < ch_limit->val.min) {
+            ch_limit->val.min = us;
+        }
+        if (us > ch_limit->val.max) {
+            ch_limit->val.max = us;
+        }
+    }
 }
 
-void configure_pid_gains(PID *pid, const rx_config_gyro_gains_t *gains,
+void Gyro::StickCenterCalibration() {
+
+    DBGLN("Gyro(): Stick Center Calibration (Init)");
+    stick_subtrim_cycles = 0;
+
+    //initialize min,max, mid
+    for (int ch=0;ch<PWM_MAX_CHANNELS;ch++) {
+        auto ch_limit = &temp_limits[ch];
+        ch_limit->val.mid = 1500;
+        ch_limit->val.min = 1500;
+        ch_limit->val.max = 1500;
+    }
+
+    learn_state = GYRO_LEARN_SUBTRIMS;
+}
+
+void Gyro::StickLimitCalibration(bool done)
+{
+   DBGLN("Gyro(): Stick Range Calibration (%s)",done?"Complete":"Started");
+
+   if (done) {
+        learn_state = GYRO_LEARN_LIMIT_DONE;
+        // save the Range
+        for (int ch=0;ch<PWM_MAX_CHANNELS;ch++) {
+            auto pwm_limits =  &temp_limits[ch];
+            DBGLN("Ch%d: Min: %d Max: %d Center: %d", 
+                ch, (uint16_t) pwm_limits->val.min, (uint16_t) pwm_limits->val.max, (uint16_t) pwm_limits->val.mid);
+            config.SetPwmChannelLimitsRaw(ch,pwm_limits->raw);
+        }
+        config.Commit();
+   } else {
+        learn_state = GYRO_LEARN_LIMIT_START;
+   }
+}
+
+
+
+void configure_pids(float roll_limit, float pitch_limit, float yaw_limit, const rx_config_gyro_fmode_t *fm)
+{
+    const rx_config_gyro_PID_t *roll_pid_params     = config.GetGyroPID(GYRO_AXIS_ROLL);
+    const rx_config_gyro_PID_t *pitch_pid_params    = config.GetGyroPID(GYRO_AXIS_PITCH);
+    const rx_config_gyro_PID_t *yaw_pid_params      = config.GetGyroPID(GYRO_AXIS_YAW);
+
+    configure_pid_gains(&pid_roll,  roll_pid_params,    fm->val.gainRoll,   roll_limit, -1.0 * roll_limit);
+    configure_pid_gains(&pid_pitch, pitch_pid_params,   fm->val.gainPitch,  pitch_limit, -1.0 * pitch_limit);
+    configure_pid_gains(&pid_yaw,   yaw_pid_params,     fm->val.gainYaw,    yaw_limit, -1.0 * yaw_limit);
+}
+
+void configure_pid_gains(PID *pid, const rx_config_gyro_PID_t *pid_params, int8_t gain,
                          float max, float min)
 {
-    DBGLN("Config gains: P %d I %d D %d G %d", gains->p, gains->i, gains->d, gains->gain);
+    DBG("Config gains: [P=%d I=%d D=%d G=%d] ", pid_params->p, pid_params->i, pid_params->d, (int8_t) gain);
     if (max == 0.0 && min == 0.0) {
         // not gyro correction on this axis
         pid->configure(0.0, 0.0, 0.0, 0.0, 0.0);
     } else {
-        float p = gains->gain * gains->p / 1000.0;
-        float i = gains->gain * gains->i / 1000.0;
-        float d = gains->gain * gains->d / 1000.0;
-        DBGLN("PID gains: P %f I %f D %f", p, i, d);
+        float p = gain * pid_params->p / 1000.0;
+        float i = gain * pid_params->i / 1000.0;
+        float d = gain * pid_params->d / 1000.0;
+        DBG("PID: [P=%f I=%f D=%f]", p, i, d);
 
         pid->configure(p, i, d, max, min);
     }
+    DBGLN("");
     pid->reset();
 }
 

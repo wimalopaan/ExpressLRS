@@ -41,5 +41,4 @@ class MPUDev_MPU6050 : public MPUDevice
 
         void setupOrientation();
         uint8_t readAndGetGravity();
-        void SaveCalibrationAndOrientation();
 };

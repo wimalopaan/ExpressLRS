@@ -6,26 +6,25 @@
 #include "mixer.h"
 #include "pid.h"
 #include "gyro_types.h"
+#include "gyro.h"
+#include "mode_level.h"
 
 /**
  * Airplane Safe Mode
  *
  * This allows normal flying, but tries to stop the plane going past set angles.
 */
-
-#define PI_180 0.0174532925199
-
-const float max_angle_roll = 30 * PI_180; // Convert degrees to radians
-const float max_angle_pitch = 30 * PI_180; // Convert degrees to radians
-
-void safe_controller_initialize()
+ 
+void SafeController::initialize()
 {
+    applyFModeSettings(GYRO_MODE_SAFE);
+
     // Set limits to two to be able to fully override a full stick input command
     // on roll and pitch axes
-    configure_pids(2.0, 2.0, 1.0);
+    configure_pids(2.0, 2.0, 1.0, &fm_settings);
 }
 
-void _calculate_pid(PID *pid, float angle, float max_angle)
+static void _calculate_pid(PID *pid, float angle, float max_angle)
 {
     if (abs(angle) < max_angle) {
         pid->reset();
@@ -35,15 +34,15 @@ void _calculate_pid(PID *pid, float angle, float max_angle)
     }
 }
 
-void safe_controller_calculate_pid()
+void SafeController::calculate_pid()
 {
-    _calculate_pid(&pid_pitch, -gyro.ypr[1], config.GetGyroSAFEPitch() * PI_180);
-    _calculate_pid(&pid_roll, gyro.ypr[2], config.GetGyroSAFERoll() * PI_180);
+    _calculate_pid(&pid_pitch, -gyro.rpy[GYRO_AXIS_PITCH], degToRad(fm_settings.val.trimPitch));
+    _calculate_pid(&pid_roll, gyro.rpy[GYRO_AXIS_ROLL], degToRad(fm_settings.val.trimRoll));
 
-    pid_yaw.calculate(0, -gyro.f_gyro[2]);
+    pid_yaw.calculate(0, -gyro.f_gyro[GYRO_AXIS_YAW]);
 }
 
-float safe_controller_out(
+float SafeController::out(
     gyro_output_channel_function_t channel_function,
     float command
 ) {
@@ -55,6 +54,7 @@ float safe_controller_out(
         return pid_roll.output;
 
     case FN_ELEVATOR:
+        if (isInverted()) pid_pitch.reset();
         return pid_pitch.output;
 
     case FN_RUDDER:
@@ -64,4 +64,12 @@ float safe_controller_out(
     }
     return 0.0;
 }
+
+uint16_t SafeController::applyCorrection(uint8_t ch, gyro_output_channel_function_t channel_function, float command, float correction) {
+     // Limit of min and max µS values is done in devServoOutput
+    return float_to_us(ch, command + correction);
+}
+
+
+
 #endif

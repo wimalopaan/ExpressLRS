@@ -24,12 +24,13 @@ static bool initialize()
     gyro.mpuDev = new MPUDev_MPU6050();
     bool ret = gyro.mpuDev->initialize();
     if (ret) {
-        DBGLN("Detected MPU6050 Gyro");
+        DBGLN("devGyro.init(): Detected MPU6050 Gyro");
     } else {
-        DBGLN("MPU6050 Gyro Not Detected");
+        DBGLN("devGyro.init(): MPU6050 Gyro Not Detected");
         gyro.mpuDev=nullptr;
     }
 #endif
+    gyro.init();
     return ret;
 }
 
@@ -39,6 +40,7 @@ static bool gyro_detect() {
 
 static int start()
 {
+    DBGLN("deGyro.start()");
     if (!mixer_initialize() || !gyro_detect()) {
         DBGLN("Gyro initialization failed");
         return DURATION_NEVER;
@@ -50,50 +52,15 @@ static int start()
 
 static int timeout()
 {
-    if (gyro.mpuDev->read()) {
-        gyro.last_update = micros();
-        gyro.send_telemetry();
-    }
     gyro.tick();
     return DURATION_IMMEDIATELY;
 }
 
-extern bool auto_subtrim_complete;
-extern uint8_t subtrim_init;
 extern gyro_event_t gyro_event;
 
 static int event()
 {
-    switch (gyro_event)
-    {
-    /*    
-    case GYRO_EVENT_CALIBRATE:
-        gyro.dev->calibrate();
-        config.SetCalibrateGyro(false);
-        gyro_event = GYRO_EVENT_NONE;
-        break;
-    */
-
-    case GYRO_EVENT_HORIZONTAL_CALIBRATE:
-        gyro.mpuDev->calibrate();
-        gyro.mpuDev->OrientationHorizontalExecute();
-        gyro_event = GYRO_EVENT_NONE;
-        break;
-    case GYRO_EVENT_VERTICAL_CALIBRATE:
-        gyro.mpuDev->OrientationVerticalExecute();
-        gyro.reload();
-        gyro_event = GYRO_EVENT_NONE;
-        break;
-
-    case GYRO_EVENT_SUBTRIMS:
-        auto_subtrim_complete = false;
-        subtrim_init = 0;
-        gyro_event = GYRO_EVENT_NONE;
-        break;
-
-    default: ;
-    }
-
+    DBGLN("deGyro.Event()");
     return DURATION_IGNORE;
 }
 

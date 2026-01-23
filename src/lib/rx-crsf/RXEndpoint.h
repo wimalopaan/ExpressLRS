@@ -16,15 +16,18 @@ private:
     void luaparamSetFailsafe(propertiesCommon *item, uint8_t arg);
 
 #if defined(HAS_GYRO)
-    void luaparamGyroCalibrate(propertiesCommon *item, uint8_t arg);
-    void luaparamGyroSubtrims(propertiesCommon *item, uint8_t arg);
-    void luaparamGyroInputChannel(propertiesCommon *item, uint8_t arg);
-    void luaparamGyroOutputChannel(propertiesCommon *item, uint8_t arg);
-    void luaparamGyroOutputMode(propertiesCommon *item, uint8_t arg);
-    void luaparamGyroOutputInverted(propertiesCommon *item, uint8_t arg);
-    void luaparamGyroGainAxis(propertiesCommon *item, uint8_t arg);
+    // Commands
+    void luaparamGyroReset(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroResetAETR(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroCalibration(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroOrientationCal(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroStickCal(propertiesCommon *item, uint8_t arg);
 
-
+    // Selections
+    void luaparamGyroInputCh_Select(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroOutputCh_Select(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroPIG_AxisSelect(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroFMode_Select(propertiesCommon *item, uint8_t arg);
 
 #endif
 

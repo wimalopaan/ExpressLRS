@@ -287,8 +287,15 @@ void CRSFEndpoint::registerParameter(void *definition, const parameterHandlerCal
         paramDefinitions[0] = (propertiesCommon *)&paramRootFolder;
         paramCallbacks[0] = nullptr;
     }
+
+    if (lastParameter==MAX_CRSF_PARAMETERS-1) {
+        DBGLN("registerParameter(): ERROR: Parameters Exeded Capacity of Array");
+        return;
+    }
+
     // Add the new parameter definition to the list
     const auto p = (propertiesCommon *)definition;
+
     lastParameter++;
     p->id = lastParameter;
     p->parent = parent;

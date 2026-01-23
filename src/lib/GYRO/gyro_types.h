@@ -17,9 +17,11 @@ typedef enum
     GYRO_EVENT_SUBTRIMS
 } gyro_event_t;
 
+#define GYRO_MAX_FMODES 6 
+
 typedef enum
 {
-    GYRO_MODE_OFF,
+    GYRO_MODE_OFF = 0,
     GYRO_MODE_RATE,
     GYRO_MODE_SAFE,
     GYRO_MODE_LEVEL,
@@ -61,20 +63,38 @@ typedef enum {
     FN_VTAIL
 } gyro_output_channel_function_t;
 
-typedef struct {
+
+typedef enum { // values are important
+    STICK_PRIORITY_FULL=0, 
+    STICK_PRIORITY_HALF=1, 
+    STICK_PRIORITY_QUARTER=2 
+} gyro_stick_priority_t;
+
+typedef enum { 
+    GYRO_LEARN_OFF, 
+    GYRO_LEARN_SUBTRIMS, 
+    GYRO_LEARN_LIMIT_START,
+    GYRO_LEARN_LIMIT_DONE 
+} gyro_learn_state_t;
+
+
+
+typedef struct __attribute__((packed)) {
     uint8_t p;
     uint8_t i;
     uint8_t d;
     uint8_t gain;
-} rx_config_gyro_gains_t;
+} rx_config_gyro_PID_t;
 
+/*
 typedef struct {
     uint16_t min;
     uint16_t mid;
     uint16_t max;
 } rx_config_gyro_timings_t;
+*/
 
-typedef union {
+typedef union __attribute__((packed)) {
     struct {
         uint32_t input_mode:5,
                  output_mode:5,
@@ -85,7 +105,29 @@ typedef union {
     uint32_t raw;
 } rx_config_gyro_channel_t;
 
-typedef union {
+typedef union __attribute__((packed)) {
+    struct {
+        uint64_t 
+                 angleLimitEnable:1,
+                 trimEnable:1,
+                 gainEnable:1,
+
+                 angleLimitPitch:8,
+                 angleLimitRoll:8,
+
+                 trimPitch:8,
+                 trimRoll:8,
+
+                 gainRoll:7,
+                 gainPitch:7,
+                 gainYaw:7,
+                 
+                 unused:1;
+    } val;
+    uint64_t raw;
+} rx_config_gyro_fmode_t;
+
+typedef union __attribute__((packed)) {
     struct {
         uint32_t pos1: 4,
                  pos2: 4,
@@ -97,7 +139,7 @@ typedef union {
     uint32_t raw;
 } rx_config_gyro_mode_pos_t;
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     uint16_t x;
     uint16_t y;
     uint16_t z;

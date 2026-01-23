@@ -276,11 +276,12 @@ constexpr uint8_t MAX_MIXES = 30; // json library seems to crash with more that 
 
 typedef union {
     struct {
-        uint32_t max:12,
+        uint64_t max:12,
                  min:12,
-                 unused: 8;
+                 mid:12,
+                 unused: 28;
     } val;
-    uint32_t raw;
+    uint64_t raw;
 } rx_config_pwm_limits_t;
 #endif
 
@@ -339,27 +340,24 @@ typedef struct __attribute__((packed)) {
                 teamracePitMode:1;  // FUTURE: Enable pit mode when disabling model
     uint8_t     targetSysId;
     uint8_t     sourceSysId;
+
+
 #if defined(HAS_GYRO)
+    uint8_t gyroVersion;
     rx_config_pwm_limits_t pwmLimits[PWM_MAX_CHANNELS];
     rx_config_mix_t mixes[MAX_MIXES];
 
     rx_config_gyro_channel_t gyroChannels[PWM_MAX_CHANNELS];
-    rx_config_gyro_timings_t gyroTimings[PWM_MAX_CHANNELS];
+    //rx_config_gyro_timings_t gyroTimings[PWM_MAX_CHANNELS];
     rx_config_gyro_mode_pos_t gyroModes; // Gyro functions for switch positions
-    rx_config_gyro_gains_t gyroGains[GYRO_N_AXES]; // PID gains for each axis
+    rx_config_gyro_PID_t gyroPIDs[GYRO_N_AXES]; // PID gains for each axis
+    rx_config_gyro_fmode_t gyroFModes[GYRO_MAX_FMODES]; // PID gains for each axis
     rx_config_gyro_calibration_t accelCalibration;
     rx_config_gyro_calibration_t gyroCalibration;
     uint8_t gyroOrientationH:3,
             gyroOrientationV:3,
             gyroEnabled:1,
             gyroUnused:1;
-    uint8_t gyroLaunchAngle;
-    uint8_t gyroSAFEPitch;
-    uint8_t gyroSAFERoll;
-    uint8_t gyroLevelPitch;
-    uint8_t gyroLevelRoll;
-    uint8_t gyroHoverStrength:4,
-            gyroHoverUnused:4;
     #endif
 } rx_config_t;
 
@@ -384,33 +382,26 @@ public:
     uint8_t GetAntennaMode() const { return m_config.antennaMode; }
     bool     IsModified() const { return m_modified != 0; }
     const rx_config_pwm_t *GetPwmChannel(uint8_t ch) const { return &m_config.pwmChannels[ch]; }
+
 #if defined(HAS_GYRO)
-const bool GetPwmChannelInverted(uint8_t ch) const { return m_config.pwmChannels[ch].val.inverted; }
+    const bool GetPwmChannelInverted(uint8_t ch) const { return m_config.pwmChannels[ch].val.inverted; }
     const rx_config_pwm_limits_t *GetPwmChannelLimits(uint8_t ch) const { return &m_config.pwmLimits[ch]; }
     const rx_config_mix_t *GetMix(uint8_t mixNumber) const { return &m_config.mixes[mixNumber]; }
 
     const rx_config_gyro_channel_t *GetGyroChannel(uint8_t ch) const { return &m_config.gyroChannels[ch]; }
-    gyro_input_channel_function_t GetGyroChannelInputMode(uint8_t ch) { return ( gyro_input_channel_function_t) m_config.gyroChannels[ch].val.input_mode; }
-    gyro_output_channel_function_t GetGyroChannelOutputMode(uint8_t ch) { return ( gyro_output_channel_function_t) m_config.gyroChannels[ch].val.output_mode; }
-    const bool GetGyroChannelOutputInverted(uint8_t ch) { return m_config.gyroChannels[ch].val.inverted; }
-    const rx_config_gyro_timings_t *GetGyroChannelTimings(uint8_t ch) const { return &m_config.gyroTimings[ch]; }
-    const rx_config_gyro_gains_t *GetGyroGains(gyro_axis_t axis) const { return &m_config.gyroGains[axis]; }
+    //const rx_config_gyro_timings_t *GetGyroChannelTimings(uint8_t ch) const { return &m_config.gyroTimings[ch]; }
+    const rx_config_gyro_PID_t *GetGyroPID(gyro_axis_t axis) const { return &m_config.gyroPIDs[axis]; }
+    const rx_config_gyro_fmode_t *GetGyroFMode(gyro_mode_t fm) const { return &m_config.gyroFModes[fm]; }
 
     const rx_config_gyro_mode_pos_t *GetGyroModePos() const { return &m_config.gyroModes;}
-    const int8_t GetGyroInputChannelNumber(gyro_input_channel_function_t mode);
-    const int8_t GetGyroOutputChannelNumber(gyro_output_channel_function_t mode);
     const uint8_t GetGyroOrientationH() const { return m_config.gyroOrientationH; }
     const uint8_t GetGyroOrientationV() const { return m_config.gyroOrientationV; }    
     const bool GetGyroEnabled() const { return m_config.gyroEnabled; }
+    const uint8_t GetGyroVersion() const { return m_config.gyroVersion; }
     const rx_config_gyro_calibration_t *GetAccelCalibration() const { return &m_config.accelCalibration; }
     const rx_config_gyro_calibration_t *GetGyroCalibration() const { return &m_config.gyroCalibration; }
-    const uint8_t GetGyroLaunchAngle() const { return m_config.gyroLaunchAngle; }
-    const uint8_t GetGyroSAFEPitch() const { return m_config.gyroSAFEPitch; }
-    const uint8_t GetGyroSAFERoll() const { return m_config.gyroSAFERoll; }
-    const uint8_t GetGyroLevelPitch() const { return m_config.gyroLevelPitch; }
-    const uint8_t GetGyroLevelRoll() const { return m_config.gyroLevelRoll; }
-    const uint8_t GetGyroHoverStrength() const { return m_config.gyroHoverStrength; }
-    #endif
+#endif
+
     bool GetForceTlmOff() const { return m_config.forceTlmOff; }
     uint8_t GetRateInitialIdx() const { return m_config.rateInitialIdx; }
     eSerialProtocol GetSerialProtocol() const { return (eSerialProtocol)m_config.serialProtocol; }
@@ -435,27 +426,24 @@ const bool GetPwmChannelInverted(uint8_t ch) const { return m_config.pwmChannels
     void SetStorageProvider(ELRS_EEPROM *eeprom);
     void SetPwmChannel(uint8_t ch, uint16_t failsafe, uint8_t inputCh, bool inverted, uint8_t mode, uint8_t stretched);
     void SetPwmChannelRaw(uint8_t ch, uint32_t raw);
+
     #if defined(HAS_GYRO)
-    void SetPwmChannelLimits(uint8_t ch, uint16_t min, uint16_t max);
-    void SetPwmChannelLimitsRaw(uint8_t ch, uint32_t raw);
+    void SetGyroDefaults(bool setPlane, bool commit);
 
-    void SetGyroChannel(uint8_t ch, uint8_t input_mode, uint8_t output_mode, bool inverted);
-    void SetGyroChannelRaw(uint8_t ch, uint32_t raw);
-    void SetGyroModePos(uint8_t pos, gyro_mode_t mode);
-    void SetGyroPIDRate(gyro_axis_t axis, gyro_rate_variable_t var, uint8_t value);
-    void SetGyroPIDGain(gyro_axis_t axis, uint8_t value);
-
+    void SetGyroVersion(uint8_t value);
     void SetGyroEnabled(bool);
     void SetAccelCalibration(uint16_t, uint16_t, uint16_t);
     void SetGyroCalibration(uint16_t, uint16_t, uint16_t);
     void SetGyroOrientation(uint8_t, uint8_t);
 
-    void SetGyroLaunchAngle(uint8_t);
-    void SetGyroSAFEPitch(uint8_t);
-    void SetGyroSAFERoll(uint8_t);
-    void SetGyroLevelPitch(uint8_t);
-    void SetGyroLevelRoll(uint8_t);
-    void SetGyroHoverStrength(uint8_t strength);
+    void SetPwmChannelLimits(uint8_t ch, uint16_t min, uint16_t max, uint16_t mid);
+    void SetPwmChannelLimitsRaw(uint8_t ch, uint64_t raw);
+
+    void SetGyroChannel(uint8_t ch, uint8_t input_mode, uint8_t output_mode, bool inverted);
+    void SetGyroChannelRaw(uint8_t ch, uint32_t raw);
+    void SetGyroFModeRaw(gyro_mode_t fm, uint64_t raw);
+    void SetGyroModePos(uint8_t pos, gyro_mode_t mode);
+    void SetGyroPIDRate(gyro_axis_t axis, gyro_rate_variable_t var, uint8_t value);
     
     void SetMixer(
         uint8_t mixNumber, mix_source_t source, mix_destination_t destination,

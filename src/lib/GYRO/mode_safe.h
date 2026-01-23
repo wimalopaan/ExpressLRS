@@ -1,6 +1,13 @@
 #pragma once
 #include "mixer.h"
+#include "gyro.h"
+#include "mode_level.h"
 
-void safe_controller_initialize();
-void safe_controller_calculate_pid();
-float safe_controller_out(gyro_output_channel_function_t channel_function, float command);
+class SafeController: public LevelController
+{
+    public:
+        void    initialize();
+        void    calculate_pid();
+        float   out(gyro_output_channel_function_t channel_function, float command);
+        virtual uint16_t applyCorrection(uint8_t ch, gyro_output_channel_function_t channel_function, float command, float correction);
+};

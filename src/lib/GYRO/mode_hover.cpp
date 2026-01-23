@@ -1,5 +1,4 @@
 #include "mode_hover.h"
-#include "gyro.h"
 #include "config.h"
 
 #if defined(HAS_GYRO)
@@ -18,25 +17,30 @@
  * directly up attitude.
  */
 
-void hover_controller_initialize() {
-    configure_pids(1.0, 1.0, 1.0);
+static int16_t hoverStrength ;
+
+void HoverController::initialize() {
+    applyFModeSettings(GYRO_MODE_HOVER);
+    
+    configure_pids(1.0, 1.0, 1.0, &fm_settings);
+    hoverStrength = 10; // config.GetGyroHoverStrength();
 }
 
-void hover_controller_calculate_pid()
+void HoverController::calculate_pid()
 {
     pid_roll.calculate(0, gyro.f_gyro[0]);
     pid_pitch.calculate(0, gyro.f_gyro[1]);
     pid_yaw.calculate(0, -gyro.f_gyro[2]);
 }
 
-float hover_controller_out(
+float HoverController::out(
     gyro_output_channel_function_t channel_function,
     float command
 )
 {
     float correction = 0.0;
     float error = gyro.ypr[1] - M_PI_2; // Pi/2 = 90degrees
-    error *= (float) config.GetGyroHoverStrength() / 16;
+    error *= (float) hoverStrength / 16;
 
     switch (channel_function)
     {
@@ -53,5 +57,16 @@ float hover_controller_out(
     }
 
     return correction;
+}
+
+uint16_t HoverController::applyCorrection(uint8_t ch, gyro_output_channel_function_t channel_function, float command, float correction) {
+    // Limit correction as set from gain input channel
+    correction *= gyro.master_gain;
+
+    // Modulate the correction depending on how much axis stick command
+    correction *= 1 - fabs(command);
+
+    // Limit of min and max µS values is done in devServoOutput
+    return float_to_us(ch, command + correction);
 }
 #endif

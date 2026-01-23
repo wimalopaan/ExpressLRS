@@ -7,8 +7,6 @@
 #include "config.h"
 
 #define I2C_MASTER_FREQ_HZ 400000
-
-
 #define MPU6050_INT_DPM             (1<<MPU6050_INTERRUPT_DMP_INT_BIT)    // 0x02
 #define MPU6050_INT_FIFO_OFLOW      (1<<MPU6050_INTERRUPT_FIFO_OFLOW_BIT) // 0x10
 
@@ -16,31 +14,37 @@
 #define gscale ((250. / 32768.0) / 100) // gyro default 250 LSB per d/s
 
 // MPU control/status vars
-bool dmpReady = false;    // set true if DMP init was successful
-uint8_t mpuIntStatus;     // holds actual interrupt status byte from MPU
-uint8_t devStatus;        // return status after each device operation (0 = success, !0 = error)
-uint16_t fifoCount;       // count of all bytes currently in FIFO
-uint8_t fifoBuffer[64];   // FIFO storage buffer
+static bool dmpReady = false;    // set true if DMP init was successful
+static uint8_t mpuIntStatus;     // holds actual interrupt status byte from MPU
+static uint8_t devStatus;        // return status after each device operation (0 = success, !0 = error)
+static uint16_t fifoCount;       // count of all bytes currently in FIFO
+static uint8_t fifoBuffer[64];   // FIFO storage buffer
 
-unsigned long last_gyro_update;
+static unsigned long last_gyro_update;
 
 // Orientation related variables
 bool orientationIsWrong;    // flag to say that orientation is wrong and so avoid any process of raw data
-uint8_t mpuOrientationH=0;
-uint8_t mpuOrientationV=0;
+static uint8_t mpuOrientationH=0;
+static uint8_t mpuOrientationV=0;
 
-uint8_t orientationX;       // contain the index 0,1, 2 of aRaw[] and gRaw[] to be moved in oax and ogx
-uint8_t orientationY;       // idem for oay and ogy
-uint8_t orientationZ;       // idem for oaz and ogz
-int8_t orientationSignX;    // contains the sign (1 or -1 ) to apply to oax and ogx
-int8_t orientationSignY;    // idem for oay and ogy
-int8_t orientationSignZ;    // idem for oaz and ogz
+static uint8_t orientationX;       // contain the index 0,1, 2 of aRaw[] and gRaw[] to be moved in oax and ogx
+static uint8_t orientationY;       // idem for oay and ogy
+static uint8_t orientationZ;       // idem for oaz and ogz
+static int8_t orientationSignX;    // contains the sign (1 or -1 ) to apply to oax and ogx
+static int8_t orientationSignY;    // idem for oay and ogy
+static int8_t orientationSignZ;    // idem for oaz and ogz
 
 
-const char* mpuOrientationNames[8] = {
-    "FRONT(X+)", "BACK(X-)", "LEFT(Y+)", "RIGHT(Y-)", "UP(Z+)", "DOWN(Z-)", "WRONG", "WRONG"};
+// Generic
+//const char* mpuOrientationNames[8] = {
+//    "FRONT(X+)", "BACK(X-)", "LEFT(Y+)", "RIGHT(Y-)", "UP(Z+)", "DOWN(Z-)", "WRONG", "WRONG"};
 
-int8_t orientationList[36][6] = {
+// HR8EG
+const char *mpuOrientationNames[8] = 
+    {"QRC Dn(X+)","QRC Up(X-)","Pins Up(Y+)","Pins Dn(Y-)","Lbl Up(Z+)","Lbl Dn(Z-)","WRONG","WRONG"};
+
+
+static int8_t orientationList[36][6] = {
 {3,3,3,0,0,0}, {3,3,3,0,0,0}, {1,2,0,1,1,1}, {1,2,0,-1,-1,1}, {2,1,0,1,-1,1}, {2,1,0,-1,1,1},\
 
 {3,3,3,0,0,0}, {3,3,3,0,0,0}, {1,2,0,1,-1,-1}, {1,2,0,-1,1,-1}, {2,1,0,1,1,-1}, {2,1,0,-1,-1,-1},\
@@ -135,10 +139,23 @@ void MPUDev_MPU6050::calibrate()
     // Run the calibration
     mpu.CalibrateAccel(8);
     mpu.CalibrateGyro(8);
+
+    config.SetAccelCalibration(
+        mpu.getXAccelOffset(),
+        mpu.getYAccelOffset(),
+        mpu.getZAccelOffset()
+    );
+    config.SetGyroCalibration(
+        mpu.getXGyroOffset(),
+        mpu.getYGyroOffset(),
+        mpu.getZGyroOffset()
+    );
+
+    start();
 }
 
 void MPUDev_MPU6050::start() {
-    DBGLN("Initialize_mpu");
+    DBGLN("MPU6050(Start)");
     
     mpu.reset();
     vTaskDelay(50 * portTICK_PERIOD_MS);
@@ -187,7 +204,6 @@ uint8_t MPUDev_MPU6050::event() {
 bool MPUDev_MPU6050::isRunning() {
     return !orientationIsWrong;
 }
-
 
 /**
  * This method is used instead of mpu.dmpGetYawPitchRoll() as that method has
@@ -268,6 +284,11 @@ bool MPUDev_MPU6050::read() {
         mpu.dmpGetEuler(gyro.euler, &gyro.q);
         mpu.dmpGetGravity(&gyro.gravity, &gyro.q);
         dmpGetYawPitchRoll(gyro.ypr, &gyro.q, &gyro.gravity);
+
+        gyro.rpy[0] = gyro.ypr[2];  // Roll
+        gyro.rpy[1] = gyro.ypr[1];  // Pitch
+        gyro.rpy[2] = gyro.ypr[0];  // Yaw
+
     }
     else
     {
@@ -313,7 +334,9 @@ void MPUDev_MPU6050::setupOrientation()
 }
 
 static void findGravity(int32_t ax, int32_t ay, int32_t az, uint8_t &idx ){
-    // find the index and sign of gravity idx=0 is X, 1=Y, 2=Z; sign 1=gravity is the opposite (normally Z axis is up and give 1) 
+    // find the index and sign of gravity 
+    //      idx:  0=X, 1=Y, 2=Z; 
+    //      sign: 1=gravity is the opposite (normally Z axis is up and give 1) 
     if ((float) ax >  (accScale1G*0.7)) { idx = 0 ;
     } else if ((float) ax < -(accScale1G*0.7)) { idx = 1 ;
     } else if ((float) ay >  (accScale1G*0.7)) { idx = 2 ;
@@ -322,7 +345,7 @@ static void findGravity(int32_t ax, int32_t ay, int32_t az, uint8_t &idx ){
     } else if ((float) az < -(accScale1G*0.7)) { idx = 5 ;
     } else { idx= 6; };
     
-    //printf("ax=%i  ay=%i  az=%i  yawIdx=%i   yawSign=%i  scale=%f\n", ax , ay ,  az, idx , sign , accScale1G);
+    DBGLN("findGravty(): ax=%d  ay=%d  az=%d  yawIdx=%d  scale=%f", ax , ay ,  az, idx, accScale1G);
 }    
 
 uint8_t MPUDev_MPU6050::readAndGetGravity(){ // return index of orientation; return 6 in case of error
@@ -340,6 +363,7 @@ void MPUDev_MPU6050::OrientationHorizontalExecute()  //
     mpuOrientationH = 6;
     mpuOrientationV = 6;
 
+    DBGLN("Horizontal Detection...");
     uint8_t idx = readAndGetGravity(); // // read the Acc and detect which face is on the upper side 
     if (idx > 5){
          DBGLN("Error during horizontal orientation: direction of gravity has not been found");
@@ -351,31 +375,17 @@ void MPUDev_MPU6050::OrientationHorizontalExecute()  //
 
 void MPUDev_MPU6050::OrientationVerticalExecute() {
     mpuOrientationV = 6;
+    DBGLN("Vertical Detection...");
     uint8_t idx = readAndGetGravity(); // // read the Acc and detect which face is on the upper side 
     if (idx > 5){
         DBGLN("Error during vertical orientation: direction of gravity has not been found");
     }
     DBGLN("Upper face (with nose up) is %s",mpuOrientationNames[idx]);
     mpuOrientationV =  idx ; // save the orientationV
-    DBGLN("Vertical orientation done\n");
-    SaveCalibrationAndOrientation();      
+
+    config.SetGyroOrientation(mpuOrientationH,mpuOrientationV);      
     setupOrientation();  // refresh the parameters linked to the orientation  
-}
-
-void MPUDev_MPU6050::SaveCalibrationAndOrientation() {
-    config.SetGyroOrientation(mpuOrientationH,mpuOrientationV);
-
-    config.SetAccelCalibration(
-        mpu.getXAccelOffset(),
-        mpu.getYAccelOffset(),
-        mpu.getZAccelOffset()
-    );
-    config.SetGyroCalibration(
-        mpu.getXGyroOffset(),
-        mpu.getYGyroOffset(),
-        mpu.getZGyroOffset()
-    );
-
     start();
 }
+
 #endif
