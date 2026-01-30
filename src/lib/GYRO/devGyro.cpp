@@ -2,7 +2,7 @@
 
 #if defined(HAS_GYRO)
 #include "gyro.h"
-#include "mpu_mpu6050.h"
+#include "mpu/mpu_mpu6050.h"
 #include "mixer.h"
 #include "logging.h"
 #include "elrs_eeprom.h" // only needed to satisfy PIO

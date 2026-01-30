@@ -3,6 +3,7 @@
 class PID
 {
 public:
+    PID();
     PID(float max, float min, float Kp, float Ki, float Kd);
     float calculate(float setpoint, float pv);
     void reset();

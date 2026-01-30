@@ -1362,20 +1362,20 @@ void RxConfig::SetGyroDefaults(bool setPlane, bool commit)
         rx_config_gyro_fmode_t tmp;
         tmp.raw = 0;
 
-        if (fm==GYRO_MODE_SAFE) {
+        if (fm==0 || fm==GYRO_MODE_SAFE || fm==GYRO_MODE_LEVEL) {
             tmp.val.angleLimitEnable = 1;
-            tmp.val.angleLimitPitch = 30;
-            tmp.val.angleLimitRoll  = 60;
+            tmp.val.angleLimitPitch = 40;
+            tmp.val.angleLimitRoll  = 70;
         }
 
-        tmp.val.trimEnable = (fm == 0 || fm == GYRO_MODE_LAUNCH)?1:0;
-        tmp.val.trimPitch       = (fm == GYRO_MODE_LAUNCH)?10:0;
-        tmp.val.trimRoll        = 0;
+        tmp.val.trimEnable  = (fm == 0 || fm == GYRO_MODE_LAUNCH)?1:0;
+        tmp.val.trimPitch   = (fm == GYRO_MODE_LAUNCH)?10:0;
+        tmp.val.trimRoll    = 0;
 
-        tmp.val.gainEnable = (fm == 0)?1:0;
-        tmp.val.gainPitch = 30;
-        tmp.val.gainRoll  = 40;
-        tmp.val.gainYaw   = 30;
+        tmp.val.gainEnable = 1;
+        tmp.val.gainRoll  = (fm == 0)?30:35;
+        tmp.val.gainPitch = (fm == 0)?40:35;
+        tmp.val.gainYaw   = (fm == 0)?50:35;
 
         SetGyroFModeRaw((gyro_mode_t) fm, tmp.raw);
     }

@@ -3,6 +3,10 @@
 
 unsigned long last_update;
 
+PID::PID() {
+    PID(0,0,0,0,0);
+}
+
 PID::PID(float max, float min, float Kp, float Ki, float Kd)
     : _maximum(max),
       _minimum(min),

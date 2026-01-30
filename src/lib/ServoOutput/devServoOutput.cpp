@@ -148,13 +148,11 @@ static void servosFailsafe()
 
 static void servoCalcAllChannels(servoWrite_fn write, bool failSafe=false)
 {
-	uint8_t numChannels = GPIO_PIN_PWM_OUTPUTS_COUNT;
-
     #if defined(HAS_GYRO)
-        numChannels = CRSF_NUM_CHANNELS;
+    gyro.mixerInput();
     #endif
 	
-    for (int ch = 0 ; ch < numChannels ; ++ch)
+    for (int ch = 0 ; ch < GPIO_PIN_PWM_OUTPUTS_COUNT ; ++ch)
     {
         const rx_config_pwm_t *chConfig = config.GetPwmChannel(ch);
         const unsigned crsfVal = ChannelData[chConfig->val.inputChannel];
@@ -181,11 +179,7 @@ static void servoCalcAllChannels(servoWrite_fn write, bool failSafe=false)
         #if defined(HAS_GYRO)
         if (!failSafe) {
             // Mix in gyro adjustments before handling inversion
-            gyro.mixer(ch, &us);
-        }
-        
-		if (ch >= GPIO_PIN_PWM_OUTPUTS_COUNT) {
-          continue;
+            gyro.mixerOutput(ch, &us);
         }
         #endif
         
@@ -196,13 +190,6 @@ static void servoCalcAllChannels(servoWrite_fn write, bool failSafe=false)
             us = 3000U - us;
         }
         
-        #if defined(HAS_GYRO)
-         if (!failSafe) {
-            // Limit output values to configured limits
-            const rx_config_pwm_limits_t *limits = config.GetPwmChannelLimits(ch);
-            us = constrain(us, limits->val.min, limits->val.max);
-         }
-        #endif 
         write(ch, us);
     } /* for each servo */
 }

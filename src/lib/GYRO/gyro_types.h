@@ -59,8 +59,10 @@ typedef enum {
     FN_AILERON,
     FN_ELEVATOR,
     FN_RUDDER,
-    FN_ELEVON,
-    FN_VTAIL
+    FN_ELEVON_L,
+    FN_ELEVON_R,
+    FN_VTAIL_L,
+    FN_VTAIL_R
 } gyro_output_channel_function_t;
 
 

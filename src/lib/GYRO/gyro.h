@@ -28,20 +28,16 @@
 
 class  MPUDevice;
 
-extern PID pid_roll;
-extern PID pid_pitch;
-extern PID pid_yaw;
-
-
 class ModeController
 {
     public:
-        virtual void    initialize();
-        virtual void    calculate_pid();
-        virtual float   out(gyro_output_channel_function_t channel_function, float command);
-        virtual uint16_t applyCorrection(uint8_t ch, gyro_output_channel_function_t channel_function, float command, float correction);
+        virtual void    initialize(gyro_mode_t mode);
+        virtual void    calculate_pid(float roll_in, float pitch_in, float yaw_in);
+        virtual void    printState();
+        virtual uint16_t applyCorrection(uint8_t ch, gyro_output_channel_function_t channel_function, float command, bool inverted);
     protected:
         gyro_stick_priority_t stick_priority = STICK_PRIORITY_HALF;
+        float roll_cor, pitch_cor, yaw_cor;
 };
 
 
@@ -52,7 +48,8 @@ public:
     void init();
     gyro_status_t getStatus();
     gyro_mode_t getMode(void);
-    void mixer(uint8_t ch, uint16_t *us);
+    void mixerInput();
+    void mixerOutput(uint8_t ch, uint16_t *us);
     void send_telemetry();
     //bool read_device();
     void tick();
@@ -64,6 +61,7 @@ public:
     MPUDevice *mpuDev = nullptr;
 
     float master_gain = 1.0;
+     gyro_mode_t gyro_mode;
 // protected:
 
     // orientation/motion vars
@@ -82,18 +80,24 @@ public:
     uint16_t update_rate;
     unsigned long last_update;
     bool initialized;
+    gyro_learn_state_t learn_state = GYRO_LEARN_OFF;
 
 private:
-    gyro_learn_state_t learn_state = GYRO_LEARN_OFF;
-    gyro_mode_t gyro_mode;
+   
     ModeController* mode_controller;
-    
+
+    int8_t  mode_ch   = -1;
+    int8_t  gain_ch   = -1;
+    int8_t  roll_ch   = -1;
+    int8_t  pitch_ch  = -1;
+    int8_t  yaw_ch    = -1;
+
     void detect_gain(uint16_t us);
     void detect_mode(uint16_t us);
     void switch_mode(gyro_mode_t mode);
     void learn_sticks(uint8_t ch, uint16_t us);
 
-    unsigned long pid_delay;
+    unsigned long pid_delay=0;
 };
 
 extern Gyro gyro;
