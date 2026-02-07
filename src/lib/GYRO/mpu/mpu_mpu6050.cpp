@@ -14,9 +14,9 @@
 #define gscale ((250. / 32768.0) / 100) // gyro default 250 LSB per d/s
 
 // MPU control/status vars
-static bool dmpReady = false;    // set true if DMP init was successful
+//static bool dmpReady = false;    // set true if DMP init was successful
 static uint8_t mpuIntStatus;     // holds actual interrupt status byte from MPU
-static uint8_t devStatus;        // return status after each device operation (0 = success, !0 = error)
+//static uint8_t devStatus;        // return status after each device operation (0 = success, !0 = error)
 static uint16_t fifoCount;       // count of all bytes currently in FIFO
 static uint8_t fifoBuffer[64];   // FIFO storage buffer
 
@@ -57,8 +57,19 @@ static int8_t orientationList[36][6] = {
 
 {0,1,2,1,-1,-1}, {0,1,2,-1,1,-1}, {1,0,2,1,1,-1}, {1,0,2,-1,-1,-1}, {3,3,3,0,0,0}, {3,3,3,0,0,0}};
 
-uint8_t accScaleCode, gyroScaleCode;
-float   accScale1G, gyroScaleRad, gyroScaleDeg;
+static uint8_t accScaleCode, gyroScaleCode;
+static float   accScale1G, gyroScaleRad, gyroScaleDeg;
+
+
+
+//static VectorInt16 aa;      // [x, y, z]            accel sensor measurements
+//static VectorInt16 aaReal;  // [x, y, z]            gravity-free accel sensor measurements
+//static VectorInt16 aaWorld; // [x, y, z]            world-frame accel sensor measurements
+static Quaternion q;        // [w, x, y, z]         quaternion container
+static VectorInt16 v_gyro;
+static VectorFloat gravity; // [x, y, z]            gravity vector    
+static float euler[3];      // [psi, theta, phi]    Euler angle container
+static float ypr[3];        // [yaw, pitch, roll]   yaw/pitch/roll container
 
 #ifdef DEBUG_GYRO_STATS
 /**
@@ -75,22 +86,22 @@ void MPUDev_MPU6050::print_gyro_stats()
 
     char rate_str[5]; sprintf(rate_str, "%4d", update_rate);
 
-    char pitch_str[8]; sprintf(pitch_str, "%6.2f", gyro.ypr[1] * 180 / M_PI);
-    char roll_str[8]; sprintf(roll_str, "%6.2f", gyro.ypr[2] * 180 / M_PI);
-    char yaw_str[8]; sprintf(yaw_str, "%6.2f", gyro.ypr[0] * 180 / M_PI);
+    char pitch_str[8]; sprintf(pitch_str, "%6.2f", ypr[1] * 180 / M_PI);
+    char roll_str[8]; sprintf(roll_str, "%6.2f", ypr[2] * 180 / M_PI);
+    char yaw_str[8]; sprintf(yaw_str, "%6.2f", ypr[0] * 180 / M_PI);
 
-    char gyro_x[8]; sprintf(gyro_x, "%6.2f", (double) gyro.v_gyro.x);
-    char gyro_y[8]; sprintf(gyro_y, "%6.2f", (double) gyro.v_gyro.y);
-    char gyro_z[8]; sprintf(gyro_z, "%6.2f", (double) gyro.v_gyro.z);
+    char gyro_x[8]; sprintf(gyro_x, "%6.2f", (double) v_gyro.x);
+    char gyro_y[8]; sprintf(gyro_y, "%6.2f", (double) v_gyro.y);
+    char gyro_z[8]; sprintf(gyro_z, "%6.2f", (double) v_gyro.z);
 
-    char gravity_x[8]; sprintf(gravity_x, "%4.2f", gyro.gravity.x);
-    char gravity_y[8]; sprintf(gravity_y, "%4.2f", gyro.gravity.y);
-    char gravity_z[8]; sprintf(gravity_z, "%4.2f", gyro.gravity.z);
+    char gravity_x[8]; sprintf(gravity_x, "%4.2f", gravity.x);
+    char gravity_y[8]; sprintf(gravity_y, "%4.2f", gravity.y);
+    char gravity_z[8]; sprintf(gravity_z, "%4.2f", gravity.z);
 
     char debug_line[128];
     sprintf(debug_line,
         "Pitch: %.2f Roll: %.2f Yaw: %.2f"
-        , gyro.ypr[1], gyro.ypr[2], gyro.ypr[0]
+        , ypr[1], ypr[2], ypr[0]
     );
     DBGLN(debug_line);
 
@@ -107,7 +118,7 @@ void MPUDev_MPU6050::print_gyro_stats()
         , gyro.gain
         ,pitch_str, roll_str, yaw_str
         // ,gyro.euler[0], gyro.euler[1], gyro.euler[2]
-        ,gyro.q.w, gyro.q.x, gyro.q.y, gyro.q.z
+        ,q.w, q.x, q.y, q.z
         // ,gyro_x, gyro_y, gyro_z
         ,gravity_x, gravity_y, gravity_z
         );
@@ -116,12 +127,15 @@ void MPUDev_MPU6050::print_gyro_stats()
 }
 #endif
 
-static MPU6050 mpu = MPU6050();
-
 bool MPUDev_MPU6050::initialize() {
     Wire.setClock(I2C_MASTER_FREQ_HZ);
+    mpu =  new MPU6050();
 
-    if (!mpu.testConnection()) return false;
+    if (!mpu->testConnection()) 
+    {
+        mpu = nullptr;
+        return false;
+    }
 
     accScaleCode = MPU6050_ACCEL_FS_2;
     accScale1G = 16384.0;
@@ -137,18 +151,18 @@ bool MPUDev_MPU6050::initialize() {
 void MPUDev_MPU6050::calibrate()
 {
     // Run the calibration
-    mpu.CalibrateAccel(8);
-    mpu.CalibrateGyro(8);
+    mpu->CalibrateAccel(8);
+    mpu->CalibrateGyro(8);
 
     config.SetAccelCalibration(
-        mpu.getXAccelOffset(),
-        mpu.getYAccelOffset(),
-        mpu.getZAccelOffset()
+        mpu->getXAccelOffset(),
+        mpu->getYAccelOffset(),
+        mpu->getZAccelOffset()
     );
     config.SetGyroCalibration(
-        mpu.getXGyroOffset(),
-        mpu.getYGyroOffset(),
-        mpu.getZGyroOffset()
+        mpu->getXGyroOffset(),
+        mpu->getYGyroOffset(),
+        mpu->getZGyroOffset()
     );
 
     start();
@@ -157,42 +171,44 @@ void MPUDev_MPU6050::calibrate()
 void MPUDev_MPU6050::start() {
     DBGLN("MPU6050(Start)");
     
-    mpu.reset();
+    mpu->reset();
     vTaskDelay(50 * portTICK_PERIOD_MS);
 
-    mpu.setFullScaleAccelRange(accScaleCode);
-    mpu.setFullScaleGyroRange(gyroScaleCode);
+    mpu->setFullScaleAccelRange(accScaleCode);
+    mpu->setFullScaleGyroRange(gyroScaleCode);
+    mpu->setMasterClockSpeed(MPU6050_CLOCK_DIV_400); // 400kHz
+    
 
-    mpu.setMasterClockSpeed(MPU6050_CLOCK_DIV_400); // 400kHz
-    mpu.setRate(0);              // Max rate?
-    mpu.setSleepEnabled(false);
-
+    /*  dmpInitialize do all this
+    mpu->setRate(0);              // Max rate?
+    mpu->setSleepEnabled(false);
     // INT_PIN_CFG
-    mpu.setInterruptMode(0);         // INT_LEVEL_HIGH
-    mpu.setInterruptDrive(0);        // INT_OPEN_DIS (push-pull)
-    mpu.setInterruptLatch(0);        // LATCH_INT_DIS (50us)
-    mpu.setInterruptLatchClear(0);   // INT_RD_CLEAR_DIS (read-only)
-    mpu.setFSyncInterruptLevel(0);   // FSYNC_INT_LEVEL_HIGH (active-high)
-    mpu.setFSyncInterruptEnabled(0); // FSYNC_INT_DIS
-    mpu.setI2CBypassEnabled(1);      // I2C_BYPASS_EN
-    mpu.setClockOutputEnabled(0);    // CLOCK_DIS
-    mpu.setExternalFrameSync(0);
+    mpu->setInterruptMode(0);         // INT_LEVEL_HIGH
+    mpu->setInterruptDrive(0);        // INT_OPEN_DIS (push-pull)
+    mpu->setInterruptLatch(0);        // LATCH_INT_DIS (50us)
+    mpu->setInterruptLatchClear(0);   // INT_RD_CLEAR_DIS (read-only)
+    mpu->setFSyncInterruptLevel(0);   // FSYNC_INT_LEVEL_HIGH (active-high)
+    mpu->setFSyncInterruptEnabled(0); // FSYNC_INT_DIS
+    mpu->setI2CBypassEnabled(1);      // I2C_BYPASS_EN
+    mpu->setClockOutputEnabled(0);    // CLOCK_DIS
+    mpu->setExternalFrameSync(0);
+    */
 
-    mpu.dmpInitialize();
+    mpu->dmpInitialize();
 
 
     const rx_config_gyro_calibration_t *offsets;
     offsets = config.GetAccelCalibration();
-    mpu.setXAccelOffset(offsets->x);
-    mpu.setYAccelOffset(offsets->y);
-    mpu.setZAccelOffset(offsets->z);
+    mpu->setXAccelOffset(offsets->x);
+    mpu->setYAccelOffset(offsets->y);
+    mpu->setZAccelOffset(offsets->z);
 
     offsets = config.GetGyroCalibration();
-    mpu.setXGyroOffset(offsets->x);
-    mpu.setYGyroOffset(offsets->y);
-    mpu.setZGyroOffset(offsets->z);
+    mpu->setXGyroOffset(offsets->x);
+    mpu->setYGyroOffset(offsets->y);
+    mpu->setZGyroOffset(offsets->z);
 
-    mpu.setDMPEnabled(true);
+    mpu->setDMPEnabled(true);
 
     setupOrientation();
 }
@@ -206,7 +222,7 @@ bool MPUDev_MPU6050::isRunning() {
 }
 
 /**
- * This method is used instead of mpu.dmpGetYawPitchRoll() as that method has
+ * This method is used instead of mpu->dmpGetYawPitchRoll() as that method has
  * issues when gravity switches at high pitch angles.
 */
 void MPUDev_MPU6050::dmpGetYawPitchRoll(float *data, Quaternion *q, VectorFloat *gravity)
@@ -254,41 +270,41 @@ static void applyOrientation(Quaternion *q)
     q->z = t[orientationZ] * orientationSignZ;
 }
 
-bool MPUDev_MPU6050::read() {
-    mpuIntStatus = mpu.getIntStatus();
-    fifoCount = mpu.getFIFOCount();
+bool MPUDev_MPU6050::read(float accel_rpy[], float angle_rpy[]) {
+    mpuIntStatus = mpu->getIntStatus();
+    fifoCount = mpu->getFIFOCount();
     if ((mpuIntStatus & MPU6050_INT_FIFO_OFLOW) || fifoCount == 1024) 
     {
         DBGLN("Resetting gyro FIFO buffer");
-        mpu.resetFIFO();
+        mpu->resetFIFO();
         return false;
     }
     else if (mpuIntStatus & MPU6050_INT_DPM) // 0x02
     {
-        int result = mpu.GetCurrentFIFOPacket(fifoBuffer, 28);
+        int result = mpu->GetCurrentFIFOPacket(fifoBuffer, 28);
         if (result != 1)
             return DURATION_IMMEDIATELY;
 
-        mpu.dmpGetGyro(&gyro.v_gyro, fifoBuffer);
-        mpu.dmpGetQuaternion(&gyro.q, fifoBuffer); // [w, x, y, z] quaternion container
+        mpu->dmpGetGyro(&v_gyro, fifoBuffer);
+        mpu->dmpGetQuaternion(&q, fifoBuffer); // [w, x, y, z] quaternion container
 
-        if (!orientationIsWrong) {
-            applyOrientation(&gyro.v_gyro);
-            applyOrientation(&gyro.q);
+        if (!orientationIsWrong) 
+        {
+            applyOrientation(&v_gyro);
+            applyOrientation(&q);
         }
 
-        gyro.f_gyro[0] = gyro.v_gyro.x * gscale; // Roll
-        gyro.f_gyro[1] = gyro.v_gyro.y * gscale; // Pitch
-        gyro.f_gyro[2] = gyro.v_gyro.z * gscale; // Yaw
+        mpu->dmpGetEuler(euler, &q);
+        mpu->dmpGetGravity(&gravity, &q);
+        dmpGetYawPitchRoll(ypr, &q, &gravity);
 
-        mpu.dmpGetEuler(gyro.euler, &gyro.q);
-        mpu.dmpGetGravity(&gyro.gravity, &gyro.q);
-        dmpGetYawPitchRoll(gyro.ypr, &gyro.q, &gyro.gravity);
-
-        gyro.rpy[0] = gyro.ypr[2];  // Roll
-        gyro.rpy[1] = gyro.ypr[1];  // Pitch
-        gyro.rpy[2] = gyro.ypr[0];  // Yaw
-
+        accel_rpy[0] = v_gyro.x * gscale; // Roll
+        accel_rpy[1] = v_gyro.y * gscale; // Pitch
+        accel_rpy[2] = v_gyro.z * gscale; // Yaw
+        
+        angle_rpy[0] = ypr[2];  // Roll
+        angle_rpy[1] = ypr[1];  // Pitch
+        angle_rpy[2] = ypr[0];  // Yaw
     }
     else
     {
@@ -312,7 +328,8 @@ void MPUDev_MPU6050::setupOrientation()
     mpuOrientationH = config.GetGyroOrientationH();
     mpuOrientationV = config.GetGyroOrientationV();
 
-    if (mpuOrientationH>5 || mpuOrientationV>5 ) {
+    if (mpuOrientationH>5 || mpuOrientationV>5 ) 
+    {
         orientationIsWrong = true;
         DBGLN("Orientation is WRONG");
         return;
@@ -352,7 +369,7 @@ uint8_t MPUDev_MPU6050::readAndGetGravity(){ // return index of orientation; ret
     int16_t ax,ay,az ;
     int16_t gx,gy,gz ;
     uint8_t idx = 6; 
-    mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+    mpu->getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
     findGravity( ax , ay , az , idx);
 	return idx;
 }
@@ -362,7 +379,7 @@ void MPUDev_MPU6050::OrientationHorizontalExecute()  //
     orientationIsWrong = true;
     mpuOrientationH = 6;
     mpuOrientationV = 6;
-
+    
     DBGLN("Horizontal Detection...");
     uint8_t idx = readAndGetGravity(); // // read the Acc and detect which face is on the upper side 
     if (idx > 5){
@@ -371,6 +388,8 @@ void MPUDev_MPU6050::OrientationHorizontalExecute()  //
     }
     DBGLN("Upper face of MPU (when model is horizontal) is %s", mpuOrientationNames[idx]);
     mpuOrientationH =  idx ; // save the orientationH      
+
+    
 }
 
 void MPUDev_MPU6050::OrientationVerticalExecute() {

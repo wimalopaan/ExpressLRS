@@ -105,32 +105,32 @@ void SafeController::initialize(gyro_mode_t mode)
 }
 
 
-void SafeController::calculate_pid(float roll_in, float pitch_in, float yaw_in)
+void SafeController::calculate_pid(float input_rpy[], float acc_rpy[], float ang_rpy[])
 {
-    RateController::calculate_pid(roll_in, pitch_in, yaw_in);
+    RateController::calculate_pid(input_rpy, acc_rpy, ang_rpy);
 
     // Adjust angle with Level Trims
-    float pitch_angle = - gyro.rpy[GYRO_AXIS_PITCH] + degToRad(fm_settings.val.trimPitch);
-    float roll_angle  = gyro.rpy[GYRO_AXIS_ROLL] + degToRad(fm_settings.val.trimRoll);
+    float pitch_angle = - ang_rpy[GYRO_AXIS_PITCH] + degToRad(fm_settings.val.trimPitch);
+    float roll_angle  = ang_rpy[GYRO_AXIS_ROLL] + degToRad(fm_settings.val.trimRoll);
 
-    AngleLockPitch.compute_pid(&pid_angle_pitch, pitch_angle, degToRad(fm_angle_settings.val.angleLimitPitch), pitch_in);
-    AngleLockRoll.compute_pid(&pid_angle_roll, roll_angle, degToRad(fm_angle_settings.val.angleLimitRoll), roll_in);
+    AngleLockPitch.compute_pid(&pid_angle_pitch, pitch_angle, degToRad(fm_angle_settings.val.angleMaxPitch), input_rpy[GYRO_AXIS_PITCH]);
+    AngleLockRoll.compute_pid(&pid_angle_roll, roll_angle, degToRad(fm_angle_settings.val.angleMaxRoll), input_rpy[GYRO_AXIS_ROLL]);
 
-    if (isInverted()) pid_angle_pitch.reset();
+    if (isInverted(ang_rpy)) pid_angle_pitch.reset(); // don't apply elevator corrections if inverted
+    if (isHighPitch(ang_rpy)) pid_angle_roll.reset(); // Roll does not work well in high pitch angles (> 80 deg)
     
     // Add angle correction to rate corrections
-    roll_cor  += pid_angle_roll.output;
-    pitch_cor += pid_angle_pitch.output;
+    corr[GYRO_AXIS_ROLL]  += pid_angle_roll.output;
+    corr[GYRO_AXIS_PITCH] += pid_angle_pitch.output;
 
-    pitch_ignore_command = AngleLockPitch.ignoreCommand();
-    roll_ignore_command = AngleLockRoll.ignoreCommand();
-
+    ignore_input[GYRO_AXIS_PITCH] = AngleLockPitch.ignoreCommand();
+    ignore_input[GYRO_AXIS_ROLL]  = AngleLockRoll.ignoreCommand();
 }
 
 void SafeController::printState() {
     RateController::printState();
 
-    DBGLN("IgnoreCmd:  Roll:%d Pitch:%d ", roll_ignore_command, pitch_ignore_command);
+    DBGLN("IgnoreCmd:  Roll:%d Pitch:%d ", ignore_input[GYRO_AXIS_ROLL], ignore_input[GYRO_AXIS_PITCH]);
     DBGLN("Ang Corr:   Roll:%f Pitch:%f", pid_angle_roll.output, pid_angle_pitch.output);
 
 }

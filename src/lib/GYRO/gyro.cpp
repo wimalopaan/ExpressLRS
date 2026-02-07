@@ -6,13 +6,15 @@
 #include "gyro_types.h"
 #include "mixer.h"
 //#include "device.h"
-#include "mpu/mpu_mpu6050.h"
+#include "mpu/mpu.h"
 #include "modes/mode_safe.h"
 #include "modes/mode_level.h"
 #include "modes/mode_hover.h"
 #include "modes/mode_rate.h"
 #include "CRSFRouter.h"
 #include "logging.h"
+
+
 
 #define GYRO_PID_DEBUG_TIME 3000  // Time im Ms
 
@@ -22,8 +24,6 @@ unsigned long gyro_debug_time = 0;
 
 // Channel Data
 extern uint32_t ChannelData[CRSF_NUM_CHANNELS];
-
-
 
 #define GYRO_SUBTRIM_INIT_SAMPLES 10
 static uint8_t stick_subtrim_cycles = 0;
@@ -40,7 +40,7 @@ static const char* STR_gyroAxis[] = {"Roll","Pitch","Yaw"};
 
 volatile gyro_event_t gyro_event = GYRO_EVENT_NONE;
 
-static ModeController*  mode_controllers [6] = { };
+static Mode_Base*  mode_controllers [6] = { };
 
 #ifdef GYRO_BOOT_JITTER
 static uint8_t boot_jitter_times = 0;
@@ -92,18 +92,47 @@ static float channel_command(uint8_t ch)
     return us_command_to_float(ch, us);
 }
 
-void Gyro::init()
+void Gyro::init(MPU_Base *mpu)
 {
     DBGLN("Gyro:Init()");
-    mode_controllers[GYRO_MODE_OFF] = nullptr;
-    mode_controllers[GYRO_MODE_RATE] = new RateController();
-    mode_controllers[GYRO_MODE_LEVEL] = new LevelController();
-    mode_controllers[GYRO_MODE_LAUNCH] = mode_controllers[GYRO_MODE_LEVEL];
-    mode_controllers[GYRO_MODE_SAFE] = new SafeController();
-    mode_controllers[GYRO_MODE_HOVER] = new HoverController();
+    
+    initialized     = false;
+    mpuDev          = mpu;
+    mode_controller = nullptr;
+    gyro_mode       = GYRO_MODE_OFF;
+    learn_state     = GYRO_LEARN_OFF;
+
+    mode_controllers[GYRO_MODE_OFF]     = nullptr;
+    mode_controllers[GYRO_MODE_RATE]    = new RateController();
+    mode_controllers[GYRO_MODE_LEVEL]   = new LevelController();
+    mode_controllers[GYRO_MODE_LAUNCH]  = mode_controllers[GYRO_MODE_LEVEL];
+    mode_controllers[GYRO_MODE_SAFE]    = new SafeController();
+    mode_controllers[GYRO_MODE_HOVER]   = new HoverController();
+}
+
+void Gyro::start()
+{
+    DBGLN("Gyro:Start()");
+    initialized = false;
+    if (!config.GetGyroEnabled()) return; //not enabled
+    if (mpuDev== nullptr) return; // No Gyro Detected
+    
+    gyro_mode = GYRO_MODE_OFF;
+    learn_state = GYRO_LEARN_OFF;
+    mpuDev->start();
+    initialized = mpuDev->isRunning();
 
     mode_controller = nullptr;
-    reload();
+    mode_ch     = GetGyroInputChannelNumber(FN_IN_GYRO_MODE);
+    gain_ch     = GetGyroInputChannelNumber(FN_IN_GYRO_GAIN);
+    roll_ch     = GetGyroInputChannelNumber(FN_IN_ROLL);
+    pitch_ch    = GetGyroInputChannelNumber(FN_IN_PITCH);
+    yaw_ch      = GetGyroInputChannelNumber(FN_IN_YAW);
+
+    #ifdef GYRO_BOOT_JITTER
+    boot_jitter_times = 0;
+    boot_jitter_time = 0;
+    #endif
 }
 
 gyro_status_t Gyro::getStatus() 
@@ -117,10 +146,7 @@ gyro_status_t Gyro::getStatus()
 void Gyro::calibrate()
 {
     //mpuDev->calibrate();
-    #ifdef GYRO_BOOT_JITTER
-    boot_jitter_times = 0;
-    boot_jitter_time = 0;
-    #endif
+    
 }
 
 void Gyro::detect_mode(uint16_t us)
@@ -148,22 +174,7 @@ void Gyro::detect_mode(uint16_t us)
 */
 void Gyro::reload()
 {
-    DBGLN("Gyro:Reload()");
-    initialized = false;
-    if (!config.GetGyroEnabled()) return; //not enabled
-    if (mpuDev== nullptr) return; // No Gyro Detected
-    
-    gyro_mode = GYRO_MODE_OFF;
-    learn_state = GYRO_LEARN_OFF;
-    mpuDev->start();
-    initialized = mpuDev->isRunning();
-
-    mode_controller = nullptr;
-    mode_ch = GetGyroInputChannelNumber(FN_IN_GYRO_MODE);
-    gain_ch = GetGyroInputChannelNumber(FN_IN_GYRO_GAIN);
-    roll_ch  = GetGyroInputChannelNumber(FN_IN_ROLL);
-    pitch_ch  = GetGyroInputChannelNumber(FN_IN_PITCH);
-    yaw_ch  = GetGyroInputChannelNumber(FN_IN_YAW);
+    start();
 }
 
 void Gyro::switch_mode(gyro_mode_t mode)
@@ -199,18 +210,15 @@ void Gyro::mixerInput()
     
     if (mode_controller == nullptr) return;
 
-    float roll_command  = 0.0;
-    float pitch_command = 0.0;
-    float yaw_command   = 0.0;
+    float input_rpy[3]  = {0.0, 0.0, 0.0};
+   
+    if (roll_ch >= 0)   input_rpy[GYRO_AXIS_ROLL]   = channel_command(roll_ch);
+    if (pitch_ch >= 0)  input_rpy[GYRO_AXIS_PITCH]  = channel_command(pitch_ch);
+    if (yaw_ch >= 0)    input_rpy[GYRO_AXIS_YAW]    = channel_command(yaw_ch);
 
+    if (gain_ch >= 0)   detect_gain(channel_us(gain_ch)); else master_gain = 1.0;
 
-    if (roll_ch >= 0) roll_command = channel_command(roll_ch);
-    if (pitch_ch >= 0) pitch_command = channel_command(pitch_ch);
-    if (yaw_ch >= 0) yaw_command = channel_command(yaw_ch);
-
-    detect_gain(channel_us(gain_ch));
-
-    mode_controller->calculate_pid(roll_command,pitch_command, yaw_command);
+    mode_controller->calculate_pid(input_rpy, acc_rpy, angle_rpy);
 
     #ifdef GYRO_PID_DEBUG_TIME
     if (gyro.gyro_mode != GYRO_MODE_OFF &&
@@ -238,7 +246,7 @@ void Gyro::mixerOutput(uint8_t ch, uint16_t *us)
     }
 
     // We get called before the gyro configuration is initialized
-    if (!initialized || mode_controller == nullptr) return;
+    if (!initialized) return;
    
     if (output_mode == FN_NONE)
         return;
@@ -247,6 +255,8 @@ void Gyro::mixerOutput(uint8_t ch, uint16_t *us)
     if (boot_jitter(us))
         return;
     #endif
+
+    if (mode_controller == nullptr) return; // Gyro OFF???
 
     // Normalize the µs value to a +-1.0 keeping in mind subtrim and max throws
     float command = us_command_to_float(ch, *us);
@@ -275,16 +285,16 @@ static int16_t decidegrees2Radians10000(int16_t angle_decidegree)
 void Gyro::send_telemetry()
 {
     // Get yaw/pitch/roll in decidegrees and convert to uint16_t
-    uint16_t ypr16[3] = {0};
-    ypr16[0] = (uint16_t)(gyro.ypr[0] * 1800 / M_PI);
-    ypr16[1] = (uint16_t)(gyro.ypr[1] * 1800 / M_PI);
-    ypr16[2] = (uint16_t)(gyro.ypr[2] * 1800 / M_PI);
-
+    uint16_t rpy16[3] = {0};
+    rpy16[GYRO_AXIS_ROLL]   = (uint16_t)(gyro.angle_rpy[GYRO_AXIS_ROLL] * 1800 / M_PI);
+    rpy16[GYRO_AXIS_PITCH]  = (uint16_t)(gyro.angle_rpy[GYRO_AXIS_PITCH] * 1800 / M_PI);
+    rpy16[GYRO_AXIS_YAW]    = (uint16_t)(gyro.angle_rpy[GYRO_AXIS_YAW] * 1800 / M_PI);
+    
     CRSF_MK_FRAME_T(crsf_sensor_attitude_t)
     crsfAttitude = {0};
-    crsfAttitude.p.pitch = htobe16(decidegrees2Radians10000(ypr16[1]));
-    crsfAttitude.p.roll = htobe16(decidegrees2Radians10000(ypr16[2]));
-    crsfAttitude.p.yaw = htobe16(decidegrees2Radians10000(ypr16[0]));
+    crsfAttitude.p.pitch = htobe16(decidegrees2Radians10000(rpy16[GYRO_AXIS_PITCH]));
+    crsfAttitude.p.roll = htobe16(decidegrees2Radians10000(rpy16[GYRO_AXIS_ROLL]));
+    crsfAttitude.p.yaw = htobe16(decidegrees2Radians10000(rpy16[GYRO_AXIS_YAW]));
 
     crsfRouter.SetHeaderAndCrc((crsf_header_t *)&crsfAttitude, CRSF_FRAMETYPE_ATTITUDE, CRSF_FRAME_SIZE(sizeof(crsf_sensor_attitude_t)));
     crsfRouter.deliverMessageTo(CRSF_ADDRESS_RADIO_TRANSMITTER, &crsfAttitude.h);
@@ -292,26 +302,34 @@ void Gyro::send_telemetry()
     CRSF_MK_FRAME_T(crsf_flight_mode_t)
     crsfFlightMode = {0};
 
-    strcpy(crsfFlightMode.p.flight_mode, STR_gyroMode[gyro_mode]);
+    strcpy(crsfFlightMode.p.flight_mode, STR_gyroMode[gyro.gyro_mode]);
 
     crsfRouter.SetHeaderAndCrc((crsf_header_t *)&crsfFlightMode, CRSF_FRAMETYPE_FLIGHT_MODE, CRSF_FRAME_SIZE(sizeof(crsf_flight_mode_t)));
     crsfRouter.deliverMessageTo(CRSF_ADDRESS_CRSF_TRANSMITTER, &crsfFlightMode.h);
 }
 
-void Gyro::tick()
+int Gyro::tick()
 {
     static long tel_delay = 0; // Behaves like Global
 
-    if (!initialized) return;
+    if (!initialized) return 1000; // come back in 1000 ms if not initialized
 
-    if (mpuDev->read()) {
+    if (mpuDev->read(acc_rpy, angle_rpy)) {
         last_update = micros();
 
-        if ((micros() - tel_delay) > 500000 ) { // 500 ms loop
+        if ((micros() - tel_delay) > 500000 ) { // 500 ms cycle
             tel_delay = micros();
             send_telemetry();
         }
     }
+
+    return 1; //1 ms:  ~1k gyro refresh loop (return for timeout)
+    //return DURATION_IMMEDIATELY;
+}
+
+uint8_t Gyro::event() 
+{
+    return mpuDev->event();
 }
 
 void Gyro::learn_sticks(uint8_t ch, uint16_t us) {
@@ -350,9 +368,9 @@ void Gyro::StickCenterCalibration() {
     //initialize min,max, mid
     for (int ch=0;ch<PWM_MAX_CHANNELS;ch++) {
         auto ch_limit = &temp_limits[ch];
-        ch_limit->val.mid = 1500; 
-        ch_limit->val.min = 1500;
-        ch_limit->val.max = 1500;
+        ch_limit->val.mid = GYRO_US_MID; 
+        ch_limit->val.min = GYRO_US_MID;
+        ch_limit->val.max = GYRO_US_MID;
     }
 
     learn_state = GYRO_LEARN_SUBTRIMS;

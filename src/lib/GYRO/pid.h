@@ -28,4 +28,6 @@ public:
     /* Derivative low-pass filter time constant */
     float tau;
     float prevMeasurement;
+
+    unsigned long last_update;
 };

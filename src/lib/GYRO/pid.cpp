@@ -1,7 +1,7 @@
 #include "targets.h"
 #include "pid.h"
 
-unsigned long last_update;
+
 
 PID::PID() {
     PID(0,0,0,0,0);
@@ -19,7 +19,8 @@ PID::PID(float max, float min, float Kp, float Ki, float Kd)
       pv(0),
       output(0),
       tau(0),
-      prevMeasurement(0)
+      prevMeasurement(0),
+      last_update(micros())
 {
 }
 
@@ -41,6 +42,8 @@ void PID::reset()
     pv = 0;
     output = 0;
     Dout = 0;
+    last_update = micros();
+    prevMeasurement=0;
 }
 
 float PID::calculate(float _setpoint, float _pv)

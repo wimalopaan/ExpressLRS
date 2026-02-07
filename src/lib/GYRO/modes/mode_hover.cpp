@@ -25,16 +25,16 @@ void HoverController::initialize(gyro_mode_t mode) {
     hoverStrength = 10; // config.GetGyroHoverStrength();
 }
 
-void HoverController::calculate_pid(float roll_in, float pitch_in, float yaw_in)
+void HoverController::calculate_pid(float input_rpy[], float acc_rpy[], float ang_rpy[])
 {
-    RateController::calculate_pid(roll_in,pitch_in, yaw_in);
+    RateController::calculate_pid(input_rpy, acc_rpy, ang_rpy);
     
-    float pitchRad = gyro.rpy[GYRO_AXIS_PITCH];
+    float pitchRad = ang_rpy[GYRO_AXIS_PITCH];
     float error = pitchRad - M_PI_2; // Pi/2 = 90degrees
     error *= (float) hoverStrength / 16;
 
-    pitch_cor += (error * cos(pitchRad));
-    yaw_cor   += (error * sin(pitchRad));
+    corr[GYRO_AXIS_PITCH] += (error * cos(pitchRad));
+    corr[GYRO_AXIS_YAW]   += (error * sin(pitchRad));
 }
 
 #endif

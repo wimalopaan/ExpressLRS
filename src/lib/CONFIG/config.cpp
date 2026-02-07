@@ -1295,7 +1295,7 @@ RxConfig::SetDefaults(bool commit)
     m_config.teamraceChannel = AUX7; // CH11
 
 #if defined(HAS_GYRO)
-    SetGyroDefaults(true, false);
+    SetGyroDefaults(false);
 #endif
 
     if (commit)
@@ -1318,7 +1318,7 @@ RxConfig::SetStorageProvider(ELRS_EEPROM *eeprom)
 
 #if defined(HAS_GYRO)
 
-void RxConfig::SetGyroDefaults(bool setPlane, bool commit) 
+void RxConfig::SetGyroDefaults(bool commit) 
 {
     DBGLN("RxConfig:SetGyroDefaults(Begin)");
     SetGyroVersion(1);
@@ -1356,44 +1356,34 @@ void RxConfig::SetGyroDefaults(bool setPlane, bool commit)
     for (int p=0;p<5;p++) {
        SetGyroModePos(p, GYRO_MODE_OFF);
     }
+    SetGyroModePos(0, GYRO_MODE_OFF);
+    SetGyroModePos(1, GYRO_MODE_OFF);
+    SetGyroModePos(2, GYRO_MODE_RATE);
+    SetGyroModePos(3, GYRO_MODE_OFF);
+    SetGyroModePos(4, GYRO_MODE_LEVEL);
 
     memset(&m_config.gyroFModes,0,sizeof(m_config.gyroFModes));
     for (int fm=0; fm < GYRO_MAX_FMODES; fm++) { // Skip Gyro OFF
         rx_config_gyro_fmode_t tmp;
         tmp.raw = 0;
 
-        if (fm==0 || fm==GYRO_MODE_SAFE || fm==GYRO_MODE_LEVEL) {
-            tmp.val.angleLimitEnable = 1;
-            tmp.val.angleLimitPitch = 40;
-            tmp.val.angleLimitRoll  = 70;
+        if (fm==GYRO_MODE_SAFE || fm==GYRO_MODE_LEVEL) {
+            tmp.val.angleMaxEnable = 1;
+            tmp.val.angleMaxPitch = 40;
+            tmp.val.angleMaxRoll  = 70;
         }
 
         tmp.val.trimEnable  = (fm == 0 || fm == GYRO_MODE_LAUNCH)?1:0;
         tmp.val.trimPitch   = (fm == GYRO_MODE_LAUNCH)?10:0;
         tmp.val.trimRoll    = 0;
 
-        tmp.val.gainEnable = 1;
+        tmp.val.gainEnable = (fm != GYRO_MODE_RATE);  // Rate inherits from ALL
         tmp.val.gainRoll  = (fm == 0)?30:35;
         tmp.val.gainPitch = (fm == 0)?40:35;
         tmp.val.gainYaw   = (fm == 0)?50:35;
 
         SetGyroFModeRaw((gyro_mode_t) fm, tmp.raw);
     }
-
-
-    if (setPlane) {
-        SetGyroChannel(0, FN_IN_ROLL, FN_AILERON, false); // Ail
-        SetGyroChannel(1, FN_IN_PITCH, FN_ELEVATOR, false); // Ele
-        SetGyroChannel(3, FN_IN_YAW, FN_RUDDER, false); // Rud
-        SetGyroChannel(8, FN_IN_GYRO_MODE, FN_NONE, false); // Mode
-        SetGyroChannel(9, FN_IN_GYRO_GAIN, FN_NONE, false); // Gain
-
-        SetGyroModePos(0, GYRO_MODE_OFF);
-        SetGyroModePos(1, GYRO_MODE_OFF);
-        SetGyroModePos(2, GYRO_MODE_RATE);
-        SetGyroModePos(3, GYRO_MODE_OFF);
-        SetGyroModePos(4, GYRO_MODE_LEVEL);
-    } 
 
     m_modified = EVENT_CONFIG_GYRO_CHANGED;
 

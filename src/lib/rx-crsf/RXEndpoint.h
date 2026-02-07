@@ -17,8 +17,7 @@ private:
 
 #if defined(HAS_GYRO)
     // Commands
-    void luaparamGyroReset(propertiesCommon *item, uint8_t arg);
-    void luaparamGyroResetAETR(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroQuickPreset(propertiesCommon *item, uint8_t arg);
     void luaparamGyroCalibration(propertiesCommon *item, uint8_t arg);
     void luaparamGyroOrientationCal(propertiesCommon *item, uint8_t arg);
     void luaparamGyroStickCal(propertiesCommon *item, uint8_t arg);

@@ -428,7 +428,7 @@ public:
     void SetPwmChannelRaw(uint8_t ch, uint32_t raw);
 
     #if defined(HAS_GYRO)
-    void SetGyroDefaults(bool setPlane, bool commit);
+    void SetGyroDefaults(bool commit);
 
     void SetGyroVersion(uint8_t value);
     void SetGyroEnabled(bool);

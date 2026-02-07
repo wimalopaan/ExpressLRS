@@ -110,12 +110,12 @@ typedef union __attribute__((packed)) {
 typedef union __attribute__((packed)) {
     struct {
         uint64_t 
-                 angleLimitEnable:1,
+                 angleMaxEnable:1,
                  trimEnable:1,
                  gainEnable:1,
 
-                 angleLimitPitch:8,
-                 angleLimitRoll:8,
+                 angleMaxPitch:8,
+                 angleMaxRoll:8,
 
                  trimPitch:8,
                  trimRoll:8,

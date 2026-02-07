@@ -7,7 +7,7 @@ class SafeController: public RateController
 {
     public:
         void    initialize(gyro_mode_t mode);
-        void    calculate_pid(float roll_in, float pitch_in, float yaw_in);
+        void    calculate_pid(float input_rpy[], float acc_rpy[], float ang_rpy[]);
         void    printState();
 
     protected:

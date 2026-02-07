@@ -1,18 +1,20 @@
 #pragma once
 #include "gyro.h"
+#include "mode.h"
 
 
-class RateController: public ModeController
+class RateController: public Mode_Base
 {
     public:
         RateController();
         void    initialize(gyro_mode_t mode);
        
         void    applyFModeSettings(gyro_mode_t fm);
-        void    calculate_pid(float roll_in, float pitch_in, float yaw_in);
-        void    calculate_stick_pri(float roll_in, float pitch_in, float yaw_in);
+        void    calculate_pid(float input_rpy[], float acc_rpy[], float ang_rpy[]);
+        void    calculate_stick_pri(float input_rpy[]);
         virtual uint16_t applyCorrection(uint8_t ch, gyro_output_channel_function_t channel_function, float command,bool inverted);
-        bool    isInverted();
+        bool    isInverted(float angle_rpy[]);
+        bool    isHighPitch(float angle_rpy[]);
         void    printState();
     protected:
         void    configure_pids(float roll_limit, float pitch_limit, float yaw_limit, const rx_config_gyro_fmode_t *fm);
@@ -20,8 +22,9 @@ class RateController: public ModeController
         
         gyro_mode_t  mode;
         rx_config_gyro_fmode_t fm_settings;
-        float roll_stick_pri,pitch_stick_pri,yaw_stick_pri;
-        bool  roll_ignore_command,pitch_ignore_command;
-        PID pid_roll, pid_pitch, pid_yaw;
-        float roll_in, pitch_in, yaw_in;
+        float input_rpy[3];
+        float stick_pri[3];
+        bool  ignore_input[3];
+        PID   pid_roll, pid_pitch, pid_yaw;
+        
 };

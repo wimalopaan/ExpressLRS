@@ -18,6 +18,11 @@
  *
  */
 
+LevelController::LevelController():
+    RateController()
+{
+}
+
 void LevelController::initialize(gyro_mode_t mode)
 {
     RateController::initialize(mode);
@@ -29,41 +34,46 @@ void LevelController::initialize(gyro_mode_t mode)
    
     float roll_limit = 1.0;
     float pitch_limit = 1.0;
-    float yaw_limit = 1.0;
 
     configure_pid_gains(&pid_angle_roll,  roll_pid_params,    fm_angle_settings.val.gainRoll,  roll_limit, -1.0 * roll_limit);
     configure_pid_gains(&pid_angle_pitch, pitch_pid_params,   fm_angle_settings.val.gainPitch,  pitch_limit, -1.0 * pitch_limit);
+
+    ignore_input[0] = ignore_input[1] = ignore_input[2] = false;
 }
 
-void LevelController::calculate_pid(float roll_in, float pitch_in, float yaw_in)
+void LevelController::calculate_pid(float input_rpy[], float acc_rpy[], float ang_rpy[])
 {
-    RateController::calculate_pid(roll_in, pitch_in, yaw_in);
+    RateController::calculate_pid(input_rpy, acc_rpy, ang_rpy);
+
+    // In Level mode, the Gyro has full control of [Pitch, Roll], not the command
+    ignore_input[GYRO_AXIS_ROLL] = ignore_input[GYRO_AXIS_PITCH] = true;
 
     // Get Pitch/Roll angles adjusted to the Level trims  (global + current senttings)
-    float pitch_angle = - gyro.rpy[GYRO_AXIS_PITCH] + degToRad(fm_settings.val.trimPitch);
-    float roll_angle  = gyro.rpy[GYRO_AXIS_ROLL] + degToRad(fm_settings.val.trimRoll);
+    float pitch_angle = - gyro.angle_rpy[GYRO_AXIS_PITCH] + degToRad((int8_t) fm_settings.val.trimPitch);
+    float roll_angle  = gyro.angle_rpy[GYRO_AXIS_ROLL] + degToRad((int8_t) fm_settings.val.trimRoll);
 
     // Angle Demand
     // The stick tell the percentage of the max angle where we want the plane to be
-    float setpoint_pitch = (pitch_in * degToRad(fm_angle_settings.val.angleLimitPitch));
-    float setpoint_roll  = -roll_in  * degToRad(fm_angle_settings.val.angleLimitRoll);
+    float setpoint_pitch = (input_rpy[GYRO_AXIS_PITCH] * degToRad(fm_angle_settings.val.angleMaxPitch));
+    float setpoint_roll  = -input_rpy[GYRO_AXIS_ROLL]  * degToRad(fm_angle_settings.val.angleMaxRoll);
 
     pid_angle_pitch.calculate(setpoint_pitch,pitch_angle);
     pid_angle_roll.calculate(setpoint_roll,roll_angle);
-    if (isInverted()) pid_angle_pitch.reset();
+
+    if (isInverted(ang_rpy)) pid_angle_pitch.reset(); // don't apply elevator corrections if inverted
+    if (isHighPitch(ang_rpy)) pid_angle_roll.reset(); // Roll does not work that well in high pitch angles (80 deg)
 
     // Add angle correction to rate corrections ajusted to angle Gains
-    roll_cor  += pid_angle_roll.output;
-    pitch_cor += pid_angle_pitch.output;
+    corr[GYRO_AXIS_ROLL]  += pid_angle_roll.output;
+    corr[GYRO_AXIS_PITCH] += pid_angle_pitch.output;
 
-    // In Level mode, the Gyro has full control, not the command
-    roll_ignore_command = pitch_ignore_command = true; 
+    
 }
 
 void LevelController::printState() {
     RateController::printState();
 
-    DBGLN("IgnoreCmd:  Roll:%d Pitch:%d ", roll_ignore_command, pitch_ignore_command);
+    DBGLN("IgnoreCmd:  Roll:%d Pitch:%d ", ignore_input[GYRO_AXIS_ROLL], ignore_input[GYRO_AXIS_PITCH]);
     DBGLN("Ang Corr:   Roll:%f Pitch:%f", pid_angle_roll.output, pid_angle_pitch.output);
 
 }

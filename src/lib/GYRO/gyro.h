@@ -9,6 +9,8 @@
 #include <math.h>
 #include "helper_3dmath.h"
 
+#define GYRO_CODE_VERSION   1
+
 #define GYRO_US_MIN 988
 #define GYRO_US_MID 1500
 #define GYRO_US_MAX 2012
@@ -26,56 +28,38 @@
 #define GYRO_BOOT_JITTER_TIMES 4
 #endif
 
-class  MPUDevice;
-
-class ModeController
-{
-    public:
-        virtual void    initialize(gyro_mode_t mode);
-        virtual void    calculate_pid(float roll_in, float pitch_in, float yaw_in);
-        virtual void    printState();
-        virtual uint16_t applyCorrection(uint8_t ch, gyro_output_channel_function_t channel_function, float command, bool inverted);
-    protected:
-        gyro_stick_priority_t stick_priority = STICK_PRIORITY_HALF;
-        float roll_cor, pitch_cor, yaw_cor;
-};
-
-
+class MPU_Base;
+class Mode_Base;
 
 class Gyro
 {
 public:
-    void init();
+    void init(MPU_Base *mpu);
+    void start();
+
     gyro_status_t getStatus();
     gyro_mode_t getMode(void);
     void mixerInput();
     void mixerOutput(uint8_t ch, uint16_t *us);
     void send_telemetry();
     //bool read_device();
-    void tick();
+    int tick();
+    uint8_t event();
     void calibrate();
     void reload();
     void StickCenterCalibration();
     void StickLimitCalibration(bool done);
 
-    MPUDevice *mpuDev = nullptr;
+    MPU_Base *mpuDev = nullptr;
 
     float master_gain = 1.0;
      gyro_mode_t gyro_mode;
 // protected:
 
     // orientation/motion vars
-    Quaternion q;        // [w, x, y, z]         quaternion container
-    VectorInt16 aa;      // [x, y, z]            accel sensor measurements
-    VectorInt16 aaReal;  // [x, y, z]            gravity-free accel sensor measurements
-    VectorInt16 aaWorld; // [x, y, z]            world-frame accel sensor measurements
-    VectorInt16 v_gyro;
-    VectorFloat gravity; // [x, y, z]            gravity vector    
-    float euler[3];      // [psi, theta, phi]    Euler angle container
-    float ypr[3];        // [yaw, pitch, roll]   yaw/pitch/roll container
-
-    float f_gyro[3];     // roll/pitch/yaw
-    float rpy[3];        // [roll, pitch, yaw] 
+    
+    float acc_rpy[3];     // [roll, pitch, yaw] accelearion
+    float angle_rpy[3];   // [roll, pitch, yaw] angles
 
     uint16_t update_rate;
     unsigned long last_update;
@@ -84,7 +68,7 @@ public:
 
 private:
    
-    ModeController* mode_controller;
+    Mode_Base* mode_controller;
 
     int8_t  mode_ch   = -1;
     int8_t  gain_ch   = -1;
