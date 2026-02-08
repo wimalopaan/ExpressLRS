@@ -1622,7 +1622,7 @@ void RXEndpoint::updateParameters()
 
     auto gyroEnabled = config.GetGyroEnabled();
     setTextSelectionValue(&luaGyroEnabled, gyroEnabled);
-    sprintf(gyroStatusStr,"Status (v %d/%d)",GYRO_CODE_VERSION, config.GetGyroVersion());
+    sprintf(gyroStatusStr,"Status (v %d-%d)",GYRO_CODE_VERSION, config.GetGyroVersion());
     luaGyroStatus.common.name = gyroStatusStr; // Change Title
     setStringValue(&luaGyroStatus,gyroStatus[gyro.getStatus()]);
 
