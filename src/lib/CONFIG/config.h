@@ -17,12 +17,7 @@
 #define RX_CONFIG_MAGIC     (0b10U << 30)
 
 #define TX_CONFIG_VERSION   8U
-#if defined(HAS_GYRO)
-// This will force a wipe of the EEPROM for our new config structure
-#define RX_CONFIG_VERSION   12U
-#else
 #define RX_CONFIG_VERSION   11U
-#endif
 
 #if defined(TARGET_TX)
 
