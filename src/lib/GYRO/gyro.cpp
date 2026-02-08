@@ -212,9 +212,19 @@ void Gyro::mixerInput()
 
     float input_rpy[3]  = {0.0, 0.0, 0.0};
    
-    if (roll_ch >= 0)   input_rpy[GYRO_AXIS_ROLL]   = channel_command(roll_ch);
-    if (pitch_ch >= 0)  input_rpy[GYRO_AXIS_PITCH]  = channel_command(pitch_ch);
-    if (yaw_ch >= 0)    input_rpy[GYRO_AXIS_YAW]    = channel_command(yaw_ch);
+    if (roll_ch >= 0)   {
+        auto info =  config.GetGyroChannel(roll_ch);
+        input_rpy[GYRO_AXIS_ROLL]   = channel_command(roll_ch) * ((info->val.inverted)?-1:+1);
+    }
+    if (pitch_ch >= 0)  {
+        auto info =  config.GetGyroChannel(pitch_ch);
+        input_rpy[GYRO_AXIS_PITCH]  = channel_command(pitch_ch) * ((info->val.inverted)?-1:+1);
+    }
+
+    if (yaw_ch >= 0) {
+        auto info =  config.GetGyroChannel(yaw_ch);
+        input_rpy[GYRO_AXIS_YAW]    = channel_command(yaw_ch) * ((info->val.inverted)?-1:+1);
+    }
 
     if (gain_ch >= 0)   detect_gain(channel_us(gain_ch)); else master_gain = 1.0;
 

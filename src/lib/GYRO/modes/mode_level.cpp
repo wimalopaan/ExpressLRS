@@ -54,8 +54,8 @@ void LevelController::calculate_pid(float input_rpy[], float acc_rpy[], float an
 
     // Angle Demand
     // The stick tell the percentage of the max angle where we want the plane to be
-    float setpoint_pitch = (input_rpy[GYRO_AXIS_PITCH] * degToRad(fm_angle_settings.val.angleMaxPitch));
-    float setpoint_roll  = -input_rpy[GYRO_AXIS_ROLL]  * degToRad(fm_angle_settings.val.angleMaxRoll);
+    float setpoint_pitch =  input_rpy[GYRO_AXIS_PITCH] * degToRad(fm_angle_settings.val.angleMaxPitch);
+    float setpoint_roll  =  input_rpy[GYRO_AXIS_ROLL]  * degToRad(fm_angle_settings.val.angleMaxRoll);
 
     pid_angle_pitch.calculate(setpoint_pitch,pitch_angle);
     pid_angle_roll.calculate(setpoint_roll,roll_angle);
