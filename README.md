@@ -10,6 +10,12 @@
 
 </center>
 
+## Gyro Support
+This is a Development Branch for Gyro support for ELRS 4.0.
+
+For Gyro documentation go here:
+[GYRO Documentation](gyro_doc/README_GYRO.md)
+
 **ExpressLRS** is developed and maintained by **ExpressLRS LLC** and its passionate open source community, working together to advance reliable, high-performance radio control technology.
 
 ## Support ExpressLRS
