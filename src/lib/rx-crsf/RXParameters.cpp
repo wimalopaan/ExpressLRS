@@ -260,35 +260,35 @@ static void luaparamGyroInputCh_Mode(propertiesCommon *item, uint8_t arg)
 }
 
 static selectionParameter luaGyroModePos1 = {
-    {"Position 1", CRSF_TEXT_SELECTION},
+    {"Position 1 (-100%)", CRSF_TEXT_SELECTION},
     0, // value
     switch_gyroModes,
     STR_EMPTYSPACE
 };
 
 static selectionParameter luaGyroModePos2 = {
-    {"Position 2", CRSF_TEXT_SELECTION},
+    {"Position 2 (-50%)", CRSF_TEXT_SELECTION},
     0, // value
     switch_gyroModes,
     STR_EMPTYSPACE
 };
 
 static selectionParameter luaGyroModePos3 = {
-    {"Position 3", CRSF_TEXT_SELECTION},
+    {"Position 3 (0%)", CRSF_TEXT_SELECTION},
     0, // value
     switch_gyroModes,
     STR_EMPTYSPACE
 };
 
 static selectionParameter luaGyroModePos4 = {
-    {"Position 4", CRSF_TEXT_SELECTION},
+    {"Position 4 (+50%)", CRSF_TEXT_SELECTION},
     0, // value
     switch_gyroModes,
     STR_EMPTYSPACE
 };
 
 static selectionParameter luaGyroModePos5 = {
-    {"Position 5", CRSF_TEXT_SELECTION},
+    {"Position 5 (+100%)", CRSF_TEXT_SELECTION},
     0, // value
     switch_gyroModes,
     STR_EMPTYSPACE
