@@ -211,55 +211,6 @@ extern TxConfig config;
 
 #if defined(TARGET_RX)
 
-#if defined(HAS_GYRO)
-typedef enum {
-    MIX_SOURCE_CH1,
-    MIX_SOURCE_CH2,
-    MIX_SOURCE_CH3,
-    MIX_SOURCE_CH4,
-    MIX_SOURCE_CH5,
-    MIX_SOURCE_CH6,
-    MIX_SOURCE_CH7,
-    MIX_SOURCE_CH8,
-    MIX_SOURCE_CH9,
-    MIX_SOURCE_CH10,
-    MIX_SOURCE_CH11,
-    MIX_SOURCE_CH12,
-    MIX_SOURCE_CH13,
-    MIX_SOURCE_CH14,
-    MIX_SOURCE_CH15,
-    MIX_SOURCE_CH16,
-    MIX_SOURCE_GYRO_ROLL,
-    MIX_SOURCE_GYRO_PITCH,
-    MIX_SOURCE_GYRO_YAW,
-    MIX_SOURCE_FAILSAFE,
-} mix_source_t;
-
-typedef enum {
-    MIX_DESTINATION_CH1,
-    MIX_DESTINATION_CH2,
-    MIX_DESTINATION_CH3,
-    MIX_DESTINATION_CH4,
-    MIX_DESTINATION_CH5,
-    MIX_DESTINATION_CH6,
-    MIX_DESTINATION_CH7,
-    MIX_DESTINATION_CH8,
-    MIX_DESTINATION_CH9,
-    MIX_DESTINATION_CH10,
-    MIX_DESTINATION_CH11,
-    MIX_DESTINATION_CH12,
-    MIX_DESTINATION_CH13,
-    MIX_DESTINATION_CH14,
-    MIX_DESTINATION_CH15,
-    MIX_DESTINATION_CH16,
-    MIX_DESTINATION_GYRO_MODE,
-    MIX_DESTINATION_GYRO_GAIN,
-    MIX_DESTINATION_GYRO_ROLL,
-    MIX_DESTINATION_GYRO_PITCH,
-    MIX_DESTINATION_GYRO_YAW,
-} mix_destination_t;
-#endif
-
 constexpr uint8_t PWM_MAX_CHANNELS = 16;
 
 typedef enum : uint8_t {
@@ -270,10 +221,6 @@ typedef enum : uint8_t {
 } rx_config_bindstorage_t;
 
 #if defined(HAS_GYRO)
-// The first 16 mixes are used for remapping outputs. This includes serial
-// outputs and PWM outputs.
-constexpr uint8_t MAX_MIXES = 30; // json library seems to crash with more that 30 list elements
-
 typedef union {
     struct {
         uint64_t max:12,
@@ -299,19 +246,6 @@ typedef union {
     uint32_t raw;
 } rx_config_pwm_t;
 
-typedef union {
-    struct {
-        uint64_t active:1,
-                 source:6,          // mix_source_t
-                 destination:6,     // mix_destination_t
-                 weight_negative:8, // -100% - +100% (signed int)
-                 weight_positive:8, // -100% - +100% (signed int)
-                 offset:11,         // us or CRSF value... (signed int)
-                //  active:1,          // enable/disable the mix
-                 unused:24;
-    } val;
-    uint64_t raw;
-} rx_config_mix_t;
 
 typedef struct __attribute__((packed)) {
     uint32_t    version;
@@ -345,7 +279,6 @@ typedef struct __attribute__((packed)) {
 #if defined(HAS_GYRO)
     uint8_t gyroVersion;
     rx_config_pwm_limits_t pwmLimits[PWM_MAX_CHANNELS];
-    rx_config_mix_t mixes[MAX_MIXES];
 
     rx_config_gyro_channel_t gyroChannels[PWM_MAX_CHANNELS];
     //rx_config_gyro_timings_t gyroTimings[PWM_MAX_CHANNELS];
@@ -386,7 +319,6 @@ public:
 #if defined(HAS_GYRO)
     const bool GetPwmChannelInverted(uint8_t ch) const { return m_config.pwmChannels[ch].val.inverted; }
     const rx_config_pwm_limits_t *GetPwmChannelLimits(uint8_t ch) const { return &m_config.pwmLimits[ch]; }
-    const rx_config_mix_t *GetMix(uint8_t mixNumber) const { return &m_config.mixes[mixNumber]; }
 
     const rx_config_gyro_channel_t *GetGyroChannel(uint8_t ch) const { return &m_config.gyroChannels[ch]; }
     //const rx_config_gyro_timings_t *GetGyroChannelTimings(uint8_t ch) const { return &m_config.gyroTimings[ch]; }
@@ -444,14 +376,6 @@ public:
     void SetGyroFModeRaw(gyro_mode_t fm, uint64_t raw);
     void SetGyroModePos(uint8_t pos, gyro_mode_t mode);
     void SetGyroPIDRate(gyro_axis_t axis, gyro_rate_variable_t var, uint8_t value);
-    
-    void SetMixer(
-        uint8_t mixNumber, mix_source_t source, mix_destination_t destination,
-        int8_t weight_negative, int8_t weight_positive, uint16_t offset,
-        bool active
-    );
-    void SetMixerRaw(uint8_t mixNumber, uint64_t raw);
-    
     #endif
     void SetForceTlmOff(bool forceTlmOff);
     void SetRateInitialIdx(uint8_t rateInitialIdx);

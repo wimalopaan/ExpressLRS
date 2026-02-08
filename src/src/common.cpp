@@ -166,13 +166,6 @@ expresslrs_rf_pref_params_s *ExpressLRS_currAirRate_RFperfParams = nullptr;
 
 // Current state of channels, CRSF format
 uint32_t ChannelData[CRSF_NUM_CHANNELS];
-/*
-#if defined(HAS_GYRO)
-// Current state of channels after mixing, CRSF format
-// Note that we have extra destination channels due to gyro mix destinations
-uint32_t ChannelMixedData[CRSF_NUM_CHANNELS];
-#endif
-*/
 
 /***
  * @brief Reset all ChannelData to CRSF_CHANNEL_VALUE_UNSET

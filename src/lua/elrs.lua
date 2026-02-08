@@ -6,7 +6,7 @@
 ---- # License GPLv2: http://www.gnu.org/licenses/gpl-2.0.html               #
 ---- #                                                                       #
 ---- #########################################################################
-local EXITVER = "-- EXIT (Lua r17) --"
+local EXITVER = "-- EXIT (Lua r17_gyro) --"
 local deviceId = 0xEE
 local handsetId = 0xEF
 local deviceName = nil
