@@ -7,7 +7,7 @@ static char *tailTypeName[]={"Empty","Normal","V-Tail","Taileron","Rud-Only"};
 
 
 void quickModelSetup(int wingType, int tailType) {
-
+  gyro.pause();
   config.SetGyroDefaults(false);
   
   config.SetGyroChannel(8, FN_IN_GYRO_MODE, FN_NONE, false); // Mode

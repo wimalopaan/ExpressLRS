@@ -47,6 +47,7 @@ public:
     uint8_t event();
     void calibrate();
     void reload();
+    void pause();
     void StickCenterCalibration();
     void StickLimitCalibration(bool done);
 

@@ -179,6 +179,15 @@ void Gyro::reload()
     start();
 }
 
+/**
+ * Trigger a gyro to stop until restarted
+*/
+void Gyro::pause()
+{
+    initialized = false;
+}
+
+
 void Gyro::switch_mode(gyro_mode_t mode)
 {
     DBGLN("Gyro: Switching mode=[%s]", STR_gyroMode[mode]);

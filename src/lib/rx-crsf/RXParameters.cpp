@@ -502,6 +502,7 @@ void RXEndpoint::luaparamGyroCalibration(propertiesCommon *item, uint8_t arg)
   {
     newStep = lcsAskConfirm;
     msg = "Plane/RX Level??";
+    gyro.pause();
   }
   else if (arg == lcsConfirmed)
   {
@@ -518,6 +519,7 @@ void RXEndpoint::luaparamGyroCalibration(propertiesCommon *item, uint8_t arg)
   {
     newStep = lcsIdle;
     msg = STR_EMPTYSPACE;
+    gyro.reload();
   }
 
   sendCommandResponse((commandParameter *)item, newStep, msg);
@@ -545,7 +547,7 @@ void RXEndpoint::luaparamGyroOrientationCal(propertiesCommon *item, uint8_t arg)
     DBGLN("Calibrating Gyro: Gyro Ready=%s",gyro.initialized?"True":"False");
     newStep = lcsAskConfirm;
     msg = "Plane/RX Level?";
-    gyro.initialized=false; // Suspend Gyro
+    gyro.pause(); // Suspend Gyro
   }
   else if (arg == lcsConfirmed)
   {
