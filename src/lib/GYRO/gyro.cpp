@@ -145,8 +145,10 @@ gyro_status_t Gyro::getStatus()
 
 void Gyro::calibrate()
 {
-    //mpuDev->calibrate();
-    
+    initialized = false;
+    // Level Calibration
+    mpuDev->calibrate(true);
+    initialized = mpuDev->isRunning();
 }
 
 void Gyro::detect_mode(uint16_t us)
@@ -327,7 +329,7 @@ int Gyro::tick()
     if (mpuDev->read(acc_rpy, angle_rpy)) {
         last_update = micros();
 
-        if ((micros() - tel_delay) > 500000 ) { // 500 ms cycle
+        if ((micros() - tel_delay) > 300000 ) { // 300 ms cycle
             tel_delay = micros();
             send_telemetry();
         }

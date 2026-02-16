@@ -23,6 +23,7 @@ void quickModelSetup(int wingType, int tailType) {
         break;
     case 3: // DELTA
         config.SetGyroChannel(0, FN_IN_ROLL, FN_ELEVON_L, false); // Ail
+        config.SetGyroChannel(1, FN_IN_PITCH, FN_ELEVON_R, false); // Ele
         break;
   }
 

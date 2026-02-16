@@ -15,7 +15,7 @@ class MPUDev_MPU6050 : public MPU_Base
         void start();
         uint8_t event();
         bool read(float accel_rpy[], float angle_rpy[]);
-        void calibrate();
+        void calibrate(bool save);
         void OrientationHorizontalExecute();
         void OrientationVerticalExecute();
         bool isRunning();

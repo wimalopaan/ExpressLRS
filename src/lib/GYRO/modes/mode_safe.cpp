@@ -10,6 +10,7 @@
 #include "gyro_types.h"
 #include "logging.h"
 
+#define   CENTER_DEADBAND   0.1  // 10% of stick movement is deadband
 /**
  * Airplane SAFE Mode
  *
@@ -59,15 +60,17 @@
                 }
             } else
             if (state==ANGLE_STATE_AT_MAX) { // Above angle limit
-                 ignore_cmd = true; // Ignore the stick input
-                 float setpoint = angle > 0 ? max_angle : - max_angle;
-                 pid->calculate(setpoint,angle);
-                 int8_t stick_dir = (cmd_in<0?-1:+1); // Sign/direction of stick
-                 if (stick_dir!=cmd_dir) { // Stick change direction past middle??
+                ignore_cmd = true; // Ignore the stick input
+                float setpoint = angle > 0 ? max_angle : - max_angle;
+                pid->calculate(setpoint,angle);
+                int8_t stick_dir = (cmd_in<0?-1:+1); // Sign/direction of stick
+                if (stick_dir!=cmd_dir || // Stick change direction past middle??
+                     fabs(stick_dir) < CENTER_DEADBAND) // or in Center??
+                { 
                     // Stick trying to degrease bank angle
                     DBGLN("Safe(): Dectected Stick Reversal");
                     state=ANGLE_STATE_REVERSING; // Rolling back
-                 }
+                }
             } 
             if (state==ANGLE_STATE_REVERSING) { // Reversing Dir, wait until we decrease angle below max to reset state
                  ignore_cmd = false; // stick is effective again, decreasing angle 

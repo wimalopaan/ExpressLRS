@@ -34,6 +34,7 @@ static int8_t orientationSignX;    // contains the sign (1 or -1 ) to apply to o
 static int8_t orientationSignY;    // idem for oay and ogy
 static int8_t orientationSignZ;    // idem for oaz and ogz
 
+static  rx_config_gyro_calibration_t hor_gyro_offsets, hor_accel_offets;
 
 // Generic
 //const char* mpuOrientationNames[8] = {
@@ -148,69 +149,37 @@ bool MPUDev_MPU6050::initialize() {
     return true;
 }
 
-void MPUDev_MPU6050::calibrate()
-{
-    // Run the calibration
-    mpu->CalibrateAccel(8);
-    mpu->CalibrateGyro(8);
-
-    config.SetAccelCalibration(
-        mpu->getXAccelOffset(),
-        mpu->getYAccelOffset(),
-        mpu->getZAccelOffset()
-    );
-    config.SetGyroCalibration(
-        mpu->getXGyroOffset(),
-        mpu->getYGyroOffset(),
-        mpu->getZGyroOffset()
-    );
-
-    start();
-}
-
 void MPUDev_MPU6050::start() {
-    DBGLN("MPU6050(Start)");
+    DBGLN("MPU6050 Start");
     
     mpu->reset();
     vTaskDelay(50 * portTICK_PERIOD_MS);
 
+    mpu->dmpInitialize();
     mpu->setFullScaleAccelRange(accScaleCode);
     mpu->setFullScaleGyroRange(gyroScaleCode);
     mpu->setMasterClockSpeed(MPU6050_CLOCK_DIV_400); // 400kHz
     
-
-    /*  dmpInitialize do all this
-    mpu->setRate(0);              // Max rate?
-    mpu->setSleepEnabled(false);
-    // INT_PIN_CFG
-    mpu->setInterruptMode(0);         // INT_LEVEL_HIGH
-    mpu->setInterruptDrive(0);        // INT_OPEN_DIS (push-pull)
-    mpu->setInterruptLatch(0);        // LATCH_INT_DIS (50us)
-    mpu->setInterruptLatchClear(0);   // INT_RD_CLEAR_DIS (read-only)
-    mpu->setFSyncInterruptLevel(0);   // FSYNC_INT_LEVEL_HIGH (active-high)
-    mpu->setFSyncInterruptEnabled(0); // FSYNC_INT_DIS
-    mpu->setI2CBypassEnabled(1);      // I2C_BYPASS_EN
-    mpu->setClockOutputEnabled(0);    // CLOCK_DIS
-    mpu->setExternalFrameSync(0);
-    */
-
-    mpu->dmpInitialize();
-
-
     const rx_config_gyro_calibration_t *offsets;
     offsets = config.GetAccelCalibration();
     mpu->setXAccelOffset(offsets->x);
     mpu->setYAccelOffset(offsets->y);
     mpu->setZAccelOffset(offsets->z);
+    DBGLN("MPU6050 Acc Offs:  x=%d,y=%d,z=%d",offsets->x, offsets->y,offsets->z);
 
     offsets = config.GetGyroCalibration();
     mpu->setXGyroOffset(offsets->x);
     mpu->setYGyroOffset(offsets->y);
     mpu->setZGyroOffset(offsets->z);
-
-    mpu->setDMPEnabled(true);
+    DBGLN("MPU6050 Gyro Offs:  x=%d,y=%d,z=%d",offsets->x, offsets->y,offsets->z);
 
     setupOrientation();
+    DBGLN("MPU6050: Gyro Calibration");
+    mpu->CalibrateGyro(8); // Calibrate Gyro only that can change with temp
+    DBGLN("MPU6050 Gyro New Offs:  x=%d,y=%d,z=%d",mpu->getXGyroOffset(), mpu->getYGyroOffset(), mpu->getZGyroOffset());
+
+    mpu->setDMPEnabled(true);
+    DBGLN("MPU6050: Ready");
 }
 
 uint8_t MPUDev_MPU6050::event() {
@@ -379,7 +348,7 @@ void MPUDev_MPU6050::OrientationHorizontalExecute()  //
     orientationIsWrong = true;
     mpuOrientationH = 6;
     mpuOrientationV = 6;
-    
+
     DBGLN("Horizontal Detection...");
     uint8_t idx = readAndGetGravity(); // // read the Acc and detect which face is on the upper side 
     if (idx > 5){
@@ -387,9 +356,26 @@ void MPUDev_MPU6050::OrientationHorizontalExecute()  //
          return;
     }
     DBGLN("Upper face of MPU (when model is horizontal) is %s", mpuOrientationNames[idx]);
-    mpuOrientationH =  idx ; // save the orientationH      
-
+    mpuOrientationH =  idx ; // save the orientationH 
     
+    // Run the calibration, but not saving the offsets
+    calibrate(false);
+
+    hor_accel_offets.x = mpu->getXAccelOffset();
+    hor_accel_offets.y = mpu->getYAccelOffset();
+    hor_accel_offets.z = mpu->getZAccelOffset();
+
+    hor_gyro_offsets.x = mpu->getXGyroOffset();
+    hor_gyro_offsets.y = mpu->getYGyroOffset();
+    hor_gyro_offsets.z = mpu->getZGyroOffset();
+
+    // Get it back to 0 to get the correct vertical orientation
+    mpu->setXAccelOffset(0);
+    mpu->setYAccelOffset(0);
+    mpu->setZAccelOffset(0);
+    mpu->setXGyroOffset(0);
+    mpu->setYGyroOffset(0);
+    mpu->setZGyroOffset(0);
 }
 
 void MPUDev_MPU6050::OrientationVerticalExecute() {
@@ -402,9 +388,41 @@ void MPUDev_MPU6050::OrientationVerticalExecute() {
     DBGLN("Upper face (with nose up) is %s",mpuOrientationNames[idx]);
     mpuOrientationV =  idx ; // save the orientationV
 
-    config.SetGyroOrientation(mpuOrientationH,mpuOrientationV);      
-    setupOrientation();  // refresh the parameters linked to the orientation  
+    config.SetGyroOrientation(mpuOrientationH,mpuOrientationV);  
+
+    // Save the Calibration
+    config.SetAccelCalibration(hor_accel_offets.x, hor_accel_offets.y, hor_accel_offets.z);
+    config.SetGyroCalibration(hor_gyro_offsets.x, hor_gyro_offsets.y, hor_gyro_offsets.z);
+
+    // Restart with the saved config Offsets
     start();
+}
+
+void MPUDev_MPU6050::calibrate(bool save)
+{
+    mpu->setXAccelOffset(0);
+    mpu->setYAccelOffset(0);
+    mpu->setZAccelOffset(0);
+    mpu->setXGyroOffset(0);
+    mpu->setYGyroOffset(0);
+    mpu->setZGyroOffset(0);
+
+    // Run the calibration
+    mpu->CalibrateAccel(8);
+    mpu->CalibrateGyro(8);
+
+    if (!save) return;
+
+    config.SetAccelCalibration(
+        mpu->getXAccelOffset(),
+        mpu->getYAccelOffset(),
+        mpu->getZAccelOffset()
+    );
+    config.SetGyroCalibration(
+        mpu->getXGyroOffset(),
+        mpu->getYGyroOffset(),
+        mpu->getZGyroOffset()
+    );
 }
 
 #endif

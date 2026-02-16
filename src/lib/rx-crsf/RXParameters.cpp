@@ -165,7 +165,7 @@ static char *tailTypeStr   = "Empty;Normal;V-Tail;Taileron;Rud-only";
 
 
 static selectionParameter luaGyroEnabled = {
-    {"Enabled", CRSF_TEXT_SELECTION},
+    {"Enable Gyro", CRSF_TEXT_SELECTION},
     0, // value
     gyroOffOn,
     STR_EMPTYSPACE
@@ -474,7 +474,7 @@ void RXEndpoint::luaparamGyroQuickPreset(propertiesCommon *item, uint8_t arg)
     // This is generally not seen by the user, since we'll disconnect to commit config
     // and the handset will send another lcdQuery that will overwrite it with idle
     newStep = lcsExecuting;
-    msg = "Executing";
+    msg = "Creating Model";
     quickModelSetup(luaGyroQuickSetup_wingType_Select.value,luaGyroQuickSetup_tailType_Select.value);
   }
   else
@@ -489,7 +489,7 @@ void RXEndpoint::luaparamGyroQuickPreset(propertiesCommon *item, uint8_t arg)
 
 //-----------  Gyro Calibration ------------------------
 static struct commandParameter luaGyroCalibration = {
-    {"Gyro Calibration", CRSF_COMMAND},
+    {"Gyro Level Calibration", CRSF_COMMAND},
     lcsIdle, // step
     STR_EMPTYSPACE
 };
@@ -501,16 +501,18 @@ void RXEndpoint::luaparamGyroCalibration(propertiesCommon *item, uint8_t arg)
   if (arg == lcsClick)
   {
     newStep = lcsAskConfirm;
-    msg = "Receiver Flat?";
+    msg = "Plane/RX Level??";
   }
   else if (arg == lcsConfirmed)
   {
     // This is generally not seen by the user, since we'll disconnect to commit config
     // and the handset will send another lcdQuery that will overwrite it with idle
     newStep = lcsExecuting;
-    msg = "Caibrtion";
-    gyro.mpuDev->calibrate();
+    msg = "Level Cal";
+    sendCommandResponse((commandParameter *)item, newStep, msg);
+    gyro.calibrate();
     gyro.reload();
+    return;
   }
   else
   {
@@ -542,7 +544,7 @@ void RXEndpoint::luaparamGyroOrientationCal(propertiesCommon *item, uint8_t arg)
     calStep = 0;
     DBGLN("Calibrating Gyro: Gyro Ready=%s",gyro.initialized?"True":"False");
     newStep = lcsAskConfirm;
-    msg = "Plane Horizontal?";
+    msg = "Plane/RX Level?";
     gyro.initialized=false; // Suspend Gyro
   }
   else if (arg == lcsConfirmed)
@@ -551,16 +553,19 @@ void RXEndpoint::luaparamGyroOrientationCal(propertiesCommon *item, uint8_t arg)
     // and the handset will send another lcdQuery that will overwrite it with idle
     newStep = lcsExecuting;
     if (calStep == 0) {
-      msg = "Horizontal Cal";
+      msg = "Level Cal";
+      sendCommandResponse((commandParameter *)item, newStep, msg);
       calStep++;
       gyro.mpuDev->OrientationHorizontalExecute();
+      return;
     } else
     if (calStep == 1) {
-      msg = "Vertical Cal";
+      msg = "Vertical Det";
+      sendCommandResponse((commandParameter *)item, newStep, msg);
       calStep++;
-
       gyro.mpuDev->OrientationVerticalExecute();
       gyro.reload(); // This will resume Gyro
+      return;
     } else
     if (calStep == 2) {
       // Calibration Done

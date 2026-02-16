@@ -142,9 +142,9 @@ typedef union __attribute__((packed)) {
 } rx_config_gyro_mode_pos_t;
 
 typedef struct __attribute__((packed)) {
-    uint16_t x;
-    uint16_t y;
-    uint16_t z;
+    int16_t x;
+    int16_t y;
+    int16_t z;
 } rx_config_gyro_calibration_t;
 
 constexpr uint8_t GYRO_MAX_CHANNELS = 16;

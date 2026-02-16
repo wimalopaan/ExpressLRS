@@ -15,6 +15,7 @@ local lineIndex = 1
 local pageOffset = 0
 local edit = nil
 local fieldPopup
+local backFromPopup = 0
 local fieldTimeout = 0
 local loadQ = {}
 local fieldChunk = 0
@@ -965,8 +966,18 @@ local function run(event, touchState)
 
   if fieldPopup ~= nil then
     runPopupPage(event)
+    backFromPopup = 1
   elseif event ~= 0 or forceRedraw or edit then
     runDevicePage(event)
+    if backFromPopup==1 then
+      backFromPopup = 0
+      local field = getField(lineIndex)
+      if (field and currentFolderId) then
+        -- returning from command execution on a sub-folder
+        -- refresh the data
+        reloadRelatedFields(field)
+      end
+    end
   end
 
   return exitscript
