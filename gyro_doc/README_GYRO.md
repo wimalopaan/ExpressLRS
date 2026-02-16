@@ -1,6 +1,7 @@
 ## HISTORY
 
 This code is an adaptation of the original gyro code created by Alex Wigen [Original Code](https://github.com/awigen/ExpressLRS/tree/add-rx-gyro-support).
+A lot of code has been changed from the original to make it easier to setup..  
 
 I got some of the new RX with Gyro from Hello Radio Sky to play (Thanks Ken!). The idea is to have code that works out-of-the box for this receivers.
 
