@@ -7,6 +7,10 @@ I got some of the new RX with Gyro from Hello Radio Sky to play (Thanks Ken!). T
 
 This code is the Official ELRS v4.0 + Gyro.
 
+## Video
+
+Created a video showing the configuration [VIDEO] (https://www.youtube.com/watch?v=Wk4s1B-1F_4)
+
 ## Gyro Support for HelloRadio HR7EG/HR8EG
 
 This branch adds support for the internal gyro on HelloRadio Gyro Receivers.
