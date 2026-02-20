@@ -23,7 +23,7 @@ unsigned long gyro_debug_time = 0;
 #endif
 
 // Channel Data
-extern uint32_t ChannelData[CRSF_NUM_CHANNELS];
+// extern uint32_t ChannelData[CRSF_NUM_CHANNELS];
 
 #define GYRO_SUBTRIM_INIT_SAMPLES 10
 static uint8_t stick_subtrim_cycles = 0;
