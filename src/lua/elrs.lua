@@ -6,14 +6,16 @@
 ---- # License GPLv2: http://www.gnu.org/licenses/gpl-2.0.html               #
 ---- #                                                                       #
 ---- #########################################################################
-local EXITVER = "-- EXIT (Lua r16) --"
+local EXITVER = "-- EXIT (Lua r17_gyro) --"
 local deviceId = 0xEE
 local handsetId = 0xEF
 local deviceName = nil
+local currentFolderName = nil
 local lineIndex = 1
 local pageOffset = 0
 local edit = nil
 local fieldPopup
+local backFromPopup = 0
 local fieldTimeout = 0
 local loadQ = {}
 local fieldChunk = 0
@@ -309,12 +311,18 @@ end
 
 local function fieldFolderOpen(field)
   currentFolderId = field.id
+  currentFolderName = field.name
+
   local backFld = fields[#fields]
+  backFld.type = 14
   backFld.name = "----BACK----"
   -- Store the lineIndex and pageOffset to return to in the backFld
   backFld.li = lineIndex
   backFld.po = pageOffset
   backFld.parent = currentFolderId
+  backFld.grandParent = fields[currentFolderId].parent
+
+  --print(string.format("creating Back: Parent=%d, GrandParent=%d",backFld.parent, backFld.grandParent or 0))
 
   lineIndex = 1
   pageOffset = 0
@@ -359,7 +367,12 @@ local function fieldCommandDisplay(field, y, attr)
 end
 
 local function fieldBackExec(field)
-  if field.parent then
+  if field.grandParent  then
+    --print(string.format("Executing Back to ParentFolder=%d",field.grandParent))    
+    fieldFolderOpen(fields[field.grandParent])
+  elseif field.parent then
+    --print(string.format("Executing Back to Main"))    
+
     lineIndex = field.li or 1
     pageOffset = field.po or 0
 
@@ -368,7 +381,9 @@ local function fieldBackExec(field)
     field.li = nil
     field.po = nil
     currentFolderId = nil
-  else
+    currentFolderName = nil
+  else -- Executing EXIT 
+    currentFolderName = nil
     exitscript = 1
   end
 end
@@ -380,6 +395,7 @@ local function changeDeviceId(devId) --change to selected device ID
   deviceId = devId
   elrsFlags = 0
   currentFolderId = nil
+  currentFolderName = nil
   deviceName = device.name
   fields_count = device.fldcnt
   deviceIsELRS_TX = device.isElrs and devId == 0xEE or nil -- ELRS and ID is TX module
@@ -611,6 +627,7 @@ local function lcd_title_color()
     lcd.drawText(COL1 + 1, barTextSpacing, elrsFlagsInfo, CUSTOM_COLOR)
   else
     lcd.drawText(COL1 + 1, barTextSpacing, deviceName, CUSTOM_COLOR)
+    lcd.drawText(LCD_W/2,   barTextSpacing, currentFolderName or "", CENTER + BOLD + CUSTOM_COLOR)
     lcd.drawText(LCD_W - 5, barTextSpacing, goodBadPkt, RIGHT + BOLD + CUSTOM_COLOR)
   end
   -- progress bar
@@ -640,7 +657,8 @@ local function lcd_title_bw()
     if titleShowWarn then
       lcd.drawText(COL1, 1, elrsFlagsInfo, INVERS)
     else
-      lcd.drawText(COL1, 1, deviceName, INVERS)
+      -- Due to space, show the folder name, or if top level, deviceName
+      lcd.drawText(COL1, 1,(currentFolderName or deviceName), INVERS)
     end
   end
 end
@@ -948,8 +966,18 @@ local function run(event, touchState)
 
   if fieldPopup ~= nil then
     runPopupPage(event)
+    backFromPopup = 1
   elseif event ~= 0 or forceRedraw or edit then
     runDevicePage(event)
+    if backFromPopup==1 then
+      backFromPopup = 0
+      local field = getField(lineIndex)
+      if (field and currentFolderId) then
+        -- returning from command execution on a sub-folder
+        -- refresh the data
+        reloadRelatedFields(field)
+      end
+    end
   end
 
   return exitscript

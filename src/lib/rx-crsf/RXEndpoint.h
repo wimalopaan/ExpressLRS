@@ -22,9 +22,27 @@ private:
     void luaparamMappingChannelOut(propertiesCommon *item, uint8_t arg);
     void luaparamSetFailsafe(propertiesCommon *item, uint8_t arg);
 
+<<<<<<< HEAD
 #if defined(WMEXTENSION) && defined(TARGET_RX)
     MultiSwitch msw;
 #endif
+=======
+#if defined(HAS_GYRO)
+    // Commands
+    void luaparamGyroQuickPreset(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroCalibration(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroOrientationCal(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroStickCal(propertiesCommon *item, uint8_t arg);
+
+    // Selections
+    void luaparamGyroInputCh_Select(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroOutputCh_Select(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroPIG_AxisSelect(propertiesCommon *item, uint8_t arg);
+    void luaparamGyroFMode_Select(propertiesCommon *item, uint8_t arg);
+
+#endif
+
+>>>>>>> gyro/gyro-dev
 };
 
 #endif //RX_ENDPOINT_H

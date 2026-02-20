@@ -7,6 +7,9 @@
 #include "crsf_protocol.h"
 #include "logging.h"
 #include "rxtx_intf.h"
+#if defined(HAS_GYRO)
+#include "gyro.h"
+#endif
 
 #if defined(WMEXTENSION) && defined(TARGET_RX)
 #include "../../src/rx_wmextension.h"
@@ -181,8 +184,12 @@ static void servosFailsafe()
     }
 }
 
-static void servoCalcAllChannels(servoWrite_fn write)
+static void servoCalcAllChannels(servoWrite_fn write, bool failSafe=false)
 {
+    #if defined(HAS_GYRO)
+    gyro.mixerInput();
+    #endif
+	
     for (int ch = 0 ; ch < GPIO_PIN_PWM_OUTPUTS_COUNT ; ++ch)
     {
         const rx_config_pwm_t *chConfig = config.GetPwmChannel(ch);
@@ -206,12 +213,21 @@ static void servoCalcAllChannels(servoWrite_fn write)
         {
             us = CRSF_to_US(crsfVal);
         }
+        
+        #if defined(HAS_GYRO)
+        if (!failSafe) {
+            // Mix in gyro adjustments before handling inversion
+            gyro.mixerOutput(ch, &us);
+        }
+        #endif
+        
         // Flip the output around the mid-value if inverted
         // (1500 - usOutput) + 1500
         if (chConfig->val.inverted)
         {
             us = 3000U - us;
         }
+        
         write(ch, us);
     } /* for each servo */
 }
@@ -227,7 +243,7 @@ static void servoUsToFailsafeConfig(uint8_t ch, uint16_t us)
 
 void servoCurrentToFailsafeConfig()
 {
-    servoCalcAllChannels(&servoUsToFailsafeConfig);
+    servoCalcAllChannels(&servoUsToFailsafeConfig,true);
 }
 
 static void servosUpdate(unsigned long now)
@@ -238,7 +254,7 @@ static void servosUpdate(unsigned long now)
     {
         newChannelsAvailable = false;
         lastUpdate = now;
-        servoCalcAllChannels(&servoWrite);
+        servoCalcAllChannels(&servoWrite, false);
     }     /* if newChannelsAvailable */
 
     // LQ goes to 0 (100 packets missed in a row)
