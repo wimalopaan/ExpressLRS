@@ -108,7 +108,7 @@ void ESP32LedDriverGRB::SetPixelColor(const int indexPixel, const RgbColor color
         const int loc = indexPixel * 24;
         for(int bitpos = 0 ; bitpos < 8 ; bitpos++)
         {
-            int bit = bitorder[bitpos];
+            int bit = bit_order[bitpos];
             out_buffer[loc + bitpos + 0] = (color.G & bit) ? 0xFFE0 : 0xF000;
             out_buffer[loc + bitpos + 8] = (color.R & bit) ? 0xFFE0 : 0xF000;
             out_buffer[loc + bitpos + 16] = (color.B & bit) ? 0xFFE0 : 0xF000;
@@ -122,7 +122,7 @@ void ESP32LedDriverRGB::SetPixelColor(const int indexPixel, const RgbColor color
         const int loc = indexPixel * 24;
         for(int bitpos = 0 ; bitpos < 8 ; bitpos++)
         {
-            int bit = bitorder[bitpos];
+            int bit = bit_order[bitpos];
             out_buffer[loc + bitpos + 0] = (color.R & bit) ? 0xFFE0 : 0xF000;
             out_buffer[loc + bitpos + 8] = (color.G & bit) ? 0xFFE0 : 0xF000;
             out_buffer[loc + bitpos + 16] = (color.B & bit) ? 0xFFE0 : 0xF000;
