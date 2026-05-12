@@ -248,7 +248,7 @@ static void ICACHE_RAM_ATTR GenerateChannelData8ch12ch_32(OTA_Packet8_s * const 
 #if defined(UNIT_TEST)
     ota8->rc.isArmed = CRSF_to_BIT(channelData[4]);
 #else
-    ota8->rc.isArmed = handset->IsArmed();
+    ota8->rc.isArmed = isArmed;
 #endif
 #if defined(DEBUG_RCVR_LINKSTATS)
     // Incremental packet counter for verification on the RX side, 32 bits shoved into CH1-CH4

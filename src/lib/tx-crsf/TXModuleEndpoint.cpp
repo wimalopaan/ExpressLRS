@@ -163,6 +163,7 @@ void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message, cons
     //      1      |   x   | Arm using CH5, armed/not armed depending on CH5 value
     //
 
+    bool armCmd;
     if (message->frame_size == CRSF_FRAME_SIZE(sizeof(crsf_channels_t)))
     {
         armCmd = CRSF_to_BIT(localChannelData[AUX1]);       // no status byte present, us CH5 to arm
@@ -181,10 +182,9 @@ void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message, cons
     }
 
     // monitoring arming state
-    if (lastArmCmd != armCmd)
+    if (isArmed != armCmd)
     {
-        handset->SetArmed(armCmd);
-        lastArmCmd = armCmd;
+        isArmed = armCmd;
 #if defined(PLATFORM_ESP32)
         devicesTriggerEvent(EVENT_ARM_FLAG_CHANGED);
 #endif
