@@ -199,14 +199,14 @@ void MultiSwitch::decode(const uint8_t* const data) {
             mFlags = 0;
             for(uint8_t i = 0; i < CRSF_EXTRA_CHANNELS; ++i) {
                 const int8_t ch8bit = data[2 + i];
-                ChannelData[i + CRSF_NUM_CHANNELS] = (int32_t(ch8bit) * ((CRSF_CHANNEL_VALUE_MAX - CRSF_CHANNEL_VALUE_MIN) / 2)) / 127 + CRSF_CHANNEL_VALUE_MID; 
+                ChannelData[i + CRSF_NUM_CHANNELS] = (int32_t(ch8bit) * ((CRSF_CHANNEL_VALUE_STD_MAX - CRSF_CHANNEL_VALUE_STD_MIN) / 2)) / 127 + CRSF_CHANNEL_VALUE_MID; 
             }
         }
         else if (cmd == CRSF_SUBCMD_CC_SETCHANNEL_EXT) { // flags, 16 channels as 8-bit
             mFlags = data[2];
             for(uint8_t i = 0; i < CRSF_EXTRA_CHANNELS; ++i) {
                 const int8_t ch8bit = data[3 + i];
-                ChannelData[i + CRSF_NUM_CHANNELS] = (int32_t(ch8bit) * ((CRSF_CHANNEL_VALUE_MAX - CRSF_CHANNEL_VALUE_MIN) / 2)) / 127 + CRSF_CHANNEL_VALUE_MID; 
+                ChannelData[i + CRSF_NUM_CHANNELS] = (int32_t(ch8bit) * ((CRSF_CHANNEL_VALUE_STD_MAX - CRSF_CHANNEL_VALUE_STD_MIN) / 2)) / 127 + CRSF_CHANNEL_VALUE_MID; 
             }
         }
     }
