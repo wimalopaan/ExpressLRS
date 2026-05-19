@@ -192,7 +192,7 @@ void SerialSUMD3::composeFrame(const uint8_t fCode, const uint32_t* const channe
                 data[i++] = us & 0x00ff;
             }
             for(uint8_t c = 24; c < 32; ++c) {
-                const uint16_t us = (CRSF_to_US(channelData[c - 24]) << 3);
+                const uint16_t us = (CRSF_to_US(channelData[c - 24 + 8]) << 3);
                 data[i++] = us >> 8;
                 data[i++] = us & 0x00ff;
             }
@@ -204,7 +204,7 @@ void SerialSUMD3::composeFrame(const uint8_t fCode, const uint32_t* const channe
                 data[i++] = us & 0x00ff;
             }
             for(uint8_t c = 24; c < 32; ++c) {
-                const uint16_t us = (CRSF_to_US(channelData[c + CRSF_NUM_CHANNELS - 24]) << 3);
+                const uint16_t us = (CRSF_to_US(channelData[c - 24 + 24]) << 3);
                 data[i++] = us >> 8;
                 data[i++] = us & 0x00ff;
             }
