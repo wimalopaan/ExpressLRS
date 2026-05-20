@@ -105,9 +105,9 @@ uint32_t SerialSUMD3::sendRCFrame(const bool frameAvailable, const bool frameMis
 
     uint8_t outBuffer[SUMD3_FRAME_LEN];
 
-    outBuffer[0] = 0xA8;		//Graupner
-    outBuffer[1] = 0x03;	    //SUMD
-    outBuffer[2] = 18; 		//16CH
+    outBuffer[0] = 0xA8;    // Graupner
+    outBuffer[1] = 0x03;	// SUMD3 (failsafe never set, ELRS just stops sending frames)
+    outBuffer[2] = 18; 		// 16CH (18 words = 16 channels + 4 bytes)
 
     switch(state) {
     case State::CH1_16:
@@ -235,7 +235,7 @@ void SerialSUMD3::composeFrame(const uint8_t fCode, const uint32_t* const channe
         data[i++] = crsfReceiver.multiSwitch().switches()[6];
     }
     data[i++] = fCode;
-    data[i++] = 0; // res
+    data[i++] = 0; // aging counter
     data[i++] = 0; // mode
     data[i++] = 0; // sub
 }
