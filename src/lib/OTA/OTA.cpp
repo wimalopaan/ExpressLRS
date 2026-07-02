@@ -651,6 +651,8 @@ bool ICACHE_RAM_ATTR UnpackChannelData8ch(OTA_Packet_s const * const otaPktPtr, 
     linkStats.uplink_TX_Power = constrain(ota8->rc.uplinkPower + 1, 1, 8);
     return ota8->rc.stubbornAck;
 }
+#endif
+#endif
 
 void OtaResetChannelDataComplete()
 {
@@ -695,8 +697,6 @@ bool ICACHE_RAM_ATTR OtaIsChannelDataComplete(uint32_t const *channelData)
     return OtaChannelDataComplete;
 #endif
 }
-#endif
-#endif
 
 bool ICACHE_RAM_ATTR ValidatePacketCrcFull(OTA_Packet_s * const otaPktPtr)
 {
