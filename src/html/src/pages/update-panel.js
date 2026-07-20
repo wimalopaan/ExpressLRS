@@ -39,8 +39,7 @@ class UpdatePanel extends LitElement {
             </div>
         `
     }
-
-
+           
     _fileSelectHandler(e) {
         // ESP32 expects .bin, ESP8285 RX expect .bin.gz
         const files = e.detail.files

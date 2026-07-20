@@ -543,7 +543,7 @@ static std::array<ExpMean, 32> ch32Filters{};
 
 bool ICACHE_RAM_ATTR UnpackChannelData8ch_32(OTA_Packet_s const * const otaPktPtr, uint32_t *channelData)
 {
-    pdebug("U8ch32: %d");
+    // pdebug("U8ch32: %d");
     OTA_Packet8_s const * const ota8 = (OTA_Packet8_s const * const)otaPktPtr;
 
     isArmed = ota8->rc.isArmed;

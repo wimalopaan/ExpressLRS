@@ -75,6 +75,7 @@ export class App extends LitElement {
                             <!-- /FEATURE:NOT IS_TX -->
                             <li><a id="menu-wifi" href="#wifi"><span class="mui--align-middle icon--symbols icon--symbols--wifi"></span>WiFi</a></li>
                             <li><a id="menu-update" href="#update"><span class="mui--align-middle icon--symbols icon--symbols--update"></span>Update</a></li>
+                            <li><a id="menu-escape32" href="#escape32"><span class="mui--align-middle icon--symbols icon--symbols--update"></span>Escape32</a></li>
                         </ul>
                     </li>
                     <li>
@@ -224,6 +225,8 @@ export class App extends LitElement {
                 return html`<wifi-panel></wifi-panel>`
             case 'update':
                 return html`<update-panel></update-panel>`
+            case 'escape32':
+                return html`<escape32-panel></escape32-panel>`
             // FEATURE:NOT IS_TX
             case 'connections':
                 return elrsState.config.pwm !== undefined ? html`<connections-panel></connections-panel>` : null
@@ -277,7 +280,7 @@ export class App extends LitElement {
     }
 
     ensureLoadedForRoute(route) {
-        if (['binding', 'options', 'wifi', 'update', 'connections', 'serial', 'gps', 'buttons', 'models'].includes(route)) {
+        if (['binding', 'options', 'wifi', 'update', 'escape32', 'connections', 'serial', 'gps', 'buttons', 'models'].includes(route)) {
             return this.loadGeneralGroup()
         }
         if (['hardware', 'voltage', 'cw', 'lr1121'].includes(route)) {
