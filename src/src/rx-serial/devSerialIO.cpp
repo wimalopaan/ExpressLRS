@@ -73,6 +73,15 @@ static int event(devserial_ctx_t *ctx)
             (*(ctx->io))->setFailsafe(connectionState == disconnected);
         }
         (*(ctx->io))->event();
+#if defined(WMEXTENSION)
+    #if defined(PLATFORM_ESP32)
+        if (!(*(ctx->io))->sendImmediateRC()) {
+            DBGLN("devices serial1IO changed");
+            return DURATION_IMMEDIATELY; // activate timeout() again
+        }
+    #endif
+#endif
+        
     }
 
     ctx->lastConnectionState = connectionState;
@@ -206,7 +215,7 @@ static int timeout(devserial_ctx_t *ctx)
         return DURATION_NEVER;
     }
 
-    /***
+    /***°
      * TODO: This contains a problem!!
      * confirmFrameAvailable() is designed to be the thing that determines if RC frames are to be sent out
      * which includes:
@@ -318,7 +327,11 @@ device_t Serial1_device = {
     .start = start,
     .event = event1,
     .timeout = timeout1,
+    #if defined(WMEXTENSION)
+    .subscribe = EVENT_CONNECTION_CHANGED | EVENT_CONFIG_MODEL_CHANGED | EVENT_RUNTIME_RECONFIGURE_SERIAL
+    #else
     .subscribe = EVENT_CONNECTION_CHANGED | EVENT_CONFIG_MODEL_CHANGED
+    #endif
 };
 #endif
 

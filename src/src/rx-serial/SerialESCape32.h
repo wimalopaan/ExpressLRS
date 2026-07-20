@@ -1,0 +1,167 @@
+#pragma once
+
+#include "SerialIO.h"
+#include "esp_crc.h"
+
+#ifdef __cpp_lib_span
+#include <span>
+#else 
+namespace std {
+    struct span {
+        uint8_t* data;
+        size_t length;
+    };
+}
+#endif
+
+extern volatile bool setupSerial1Special;
+
+enum class SerialEvent : uint8_t {
+    None            = 0,
+    WriteFirmware   = 1 << 0,
+    WriteBootloader = 1 << 1
+};
+
+void serialEvent(SerialEvent e);
+
+class SerialESCape32 : public SerialIO {
+    static constexpr auto ESCAPE32_CALLBACK_INTERVAL_MS = 50;
+    static constexpr uint8_t CMD_PROBE  = 0;
+    static constexpr uint8_t CMD_INFO   = 1;
+    static constexpr uint8_t CMD_READ   = 2;
+    static constexpr uint8_t CMD_WRITE  = 3;
+    static constexpr uint8_t CMD_UPDATE = 4;
+    static constexpr uint8_t CMD_SETWRP = 5;
+    
+    template<size_t Size = 2048>
+    struct ESCape32Buffer {
+        void clear() {
+            std::fill(std::begin(mData), std::end(mData), 0xff);
+            mIndex = 0;
+        }
+        size_t length() const {
+            return mIndex;
+        }
+        const uint8_t* data() const {
+            return &mData[0];
+        }
+        ESCape32Buffer& operator+=(const uint8_t v) {
+            push(v);
+            push(~v);
+            return *this;
+        }
+        template<size_t L>
+        ESCape32Buffer& operator+=(const std::array<uint8_t, L>& data) {
+            (*this) += (L / 4 - 1);
+            for(const auto& d: data) {
+                push(d);
+            }
+            const uint32_t crc = esp_crc32_le(0, &data[0], L);
+            for(uint8_t i = 0; i < sizeof(crc); ++i) {
+                push(((uint8_t*)&crc)[i]);
+            }
+            return *this;
+        }
+        ESCape32Buffer& operator+=(const std::span& sp) {
+            (*this) += (sp.length / 4 - 1);
+            for(size_t i = 0; i < sp.length; ++i) {
+                push(sp.data[i]);
+            }
+            const uint32_t crc = esp_crc32_le(0, &sp.data[0], sp.length);
+            for(uint8_t i = 0; i < sizeof(crc); ++i) {
+                push(((uint8_t*)&crc)[i]);
+            }
+            return *this;
+            
+        }
+
+    private:
+        void push(const uint8_t v) {
+            if (mIndex < Size) {
+                mData[mIndex++] = v;
+            }
+        }
+        size_t mIndex{};
+        std::array<uint8_t, Size> mData{};
+    };    
+    enum class State : uint8_t {
+        Idle,
+        Probe,
+        Info,
+        Read,
+        Show,
+        SetCrsfInputMode,
+        SetCrsfTelemMode,
+        WriteBootloader,
+        WriteBootloaderCheck,
+        EraseSignature,
+        EraseSignatureCheck,
+        WriteFirmware,
+        WriteFirmwareCheck,
+        WriteSignature,
+        WriteSignatureCheck,
+    };
+    struct Parser {
+        struct BootLoaderInfo {
+            uint8_t mRevision{};
+            uint8_t mPin{};
+            uint32_t mMcu{};
+        };
+        struct FirmwareInfo {
+            uint8_t mRevision{};
+            uint8_t mPatch{};
+            std::array<char, 16> mTarget{};            
+        };
+        enum class State : uint8_t {Idle, Probe, Info, Read, EraseWriteFirmware, WriteBootloader, Ok, Error};
+        void process(const uint8_t b);
+        void set(const State s);
+        explicit operator bool() const;
+    private:
+        void probe();
+        void writeOK();
+        void info();
+        void read();
+        uint8_t valueAt(uint8_t index);
+        bool checkData(uint16_t payloadLength);
+        State mState = State::Idle;
+        uint8_t mIndex{};
+        std::array<uint8_t, 64> mData{};
+        BootLoaderInfo mBLInfo;
+        FirmwareInfo mFWInfo;
+    };
+public:
+    explicit SerialESCape32(Stream &out, Stream &in);
+    ~SerialESCape32() override;
+    uint32_t sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t *channelData) override;
+protected:
+    void processBytes(uint8_t *bytes, uint16_t size) override;
+private:
+    void send();
+    void show();
+    void probe();
+    void info();
+    void read();
+    
+    void sendBootloader();
+    
+    void eraseSignature();
+    void sendFirmware();
+    
+    State mState = State::Idle;
+    bool mSkipFirstReceivedByte = false;
+    
+    Parser mParser;
+
+    ESCape32Buffer<>* mBuffer = nullptr;
+    
+    struct MultiBlockState {
+        void reset() {
+            mNumber = 0;
+            mPosition = 0;
+        }
+        uint16_t mNumber{};
+        uint32_t mPosition{};
+    };
+    
+    MultiBlockState mMultiBlockState;
+};

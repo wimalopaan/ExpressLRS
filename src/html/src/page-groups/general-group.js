@@ -1,6 +1,7 @@
 import '../pages/binding-panel.js'
 import '../pages/wifi-panel.js'
 import '../pages/update-panel.js'
+import '../pages/escape32-panel.js'
 
 // FEATURE:IS_TX
 import '../pages/tx-options-panel.js'

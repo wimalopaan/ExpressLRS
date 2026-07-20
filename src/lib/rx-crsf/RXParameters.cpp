@@ -45,7 +45,7 @@ static selectionParameter luaSerialProtocol = {
 static selectionParameter luaSerial1Protocol = {
     {"Protocol2", CRSF_TEXT_SELECTION},
     0, // value
-    "Off;CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;DJI RS Pro;HoTT Telemetry;Tramp;SmartAudio;DisplayPort;GPS",
+    "Off;CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;DJI RS Pro;HoTT Telemetry;Tramp;SmartAudio;DisplayPort;GPS;ESCape32",
     STR_EMPTYSPACE
 };
 #endif
