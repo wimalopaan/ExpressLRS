@@ -1388,6 +1388,18 @@ void RxConfig::SetSerialProtocol(eSerialProtocol serialProtocol)
 }
 
 #if defined(PLATFORM_ESP32)
+# if defined(WMEXTENSION)
+void RxConfig::SetSerial1Protocol(eSerial1Protocol serialProtocol, bool event)
+{
+    if (m_config.serial1Protocol != serialProtocol)
+    {
+        m_config.serial1Protocol = serialProtocol;
+        if (event) {
+            m_modified = EVENT_CONFIG_SERIAL_CHANGE;
+        }
+    }
+}
+# else
 void RxConfig::SetSerial1Protocol(eSerial1Protocol serialProtocol)
 {
     if (m_config.serial1Protocol != serialProtocol)
@@ -1396,6 +1408,7 @@ void RxConfig::SetSerial1Protocol(eSerial1Protocol serialProtocol)
         m_modified = EVENT_CONFIG_SERIAL_CHANGE;
     }
 }
+#endif
 #endif
 
 void RxConfig::SetTeamraceChannel(uint8_t teamraceChannel)

@@ -242,7 +242,10 @@ enum eSerial1Protocol : uint8_t
     PROTOCOL_SERIAL1_TRAMP,
     PROTOCOL_SERIAL1_SMARTAUDIO,
     PROTOCOL_SERIAL1_MSP_DISPLAYPORT,
-    PROTOCOL_SERIAL1_GPS
+    PROTOCOL_SERIAL1_GPS,
+#if defined(WMEXTENSION)
+    PROTOCOL_SERIAL1_ESCAPE32,
+#endif
 };
 #endif
 
@@ -313,7 +316,29 @@ extern expresslrs_mod_settings_s *ExpressLRS_currAirRate_Modparams;
 extern expresslrs_rf_pref_params_s *ExpressLRS_currAirRate_RFperfParams;
 
 #if defined(WMEXTENSION)
+struct FirmwareBuffer {
+    std::array<char, 64> name{};
+    std::array<uint8_t, (1 << 16)> data{};
+    uint32_t length{};
+    bool isBootloader = false;
+};
+struct ESCape32Status {
+    ESCape32Status() {
+        clear();
+    }
+    void clear() {
+        firmware = "---";
+        bootloader = "---";
+        target = "---";
+        actual = "---";
+    }
+    String firmware;
+    String bootloader;
+    String target;
+    String actual;
+};
 extern uint32_t ChannelData[CRSF_NUM_CHANNELS + CRSF_EXTRA_CHANNELS];
+extern FirmwareBuffer* firmwareBuffer;
 #else
 extern uint32_t ChannelData[CRSF_NUM_CHANNELS];
 #endif

@@ -28,6 +28,22 @@
 #include "rx-serial/SerialDisplayport.h"
 #include "rx-serial/SerialGPS.h"
 
+#if defined(WMEXTENSION)
+#include "rx-serial/SerialESCape32.h"
+#include "hal/gpio_hal.h"
+#include <utility>
+# if !defined(__cpp_lib_exchange_function)
+namespace std {
+    template<class T, class U = T>
+    T exchange(T& obj, U&& new_value) {
+        T old_value = std::move(obj);
+        obj = std::forward<U>(new_value);
+        return old_value;
+    }
+}
+# endif
+#endif
+
 #include "devAnalogVbat.h"
 #include "devBaro.h"
 #include "devButton.h"
@@ -1414,6 +1430,17 @@ static void serial1Shutdown()
     }
 }
 
+static void  addPullupOpenDrain(const uint8_t pin) {
+    static constexpr gpio_hal_context_t _gpio_hal = {
+        .dev = GPIO_HAL_GET_HW(GPIO_PORT_0)
+    };
+    gpio_hal_od_enable(&_gpio_hal, (gpio_num_t)pin);
+    gpio_pullup_en((gpio_num_t)pin);
+    // pinMode(serial1TXpin, INPUT | OUTPUT | OPEN_DRAIN | PULLUP);
+    // pinMode(serial1TXpin, OPEN_DRAIN | PULLUP);
+    // pinMode(serial1TXpin, OUTPUT_OPEN_DRAIN);
+}
+
 static void setupSerial1()
 {
     //
@@ -1441,6 +1468,8 @@ static void setupSerial1()
         }
     }
 
+    DBGLN("setupSerial1: p: %u, tx: %u", config.GetSerial1Protocol(), serial1TXpin);
+    
     switch(config.GetSerial1Protocol())
     {
         case PROTOCOL_SERIAL1_OFF:
@@ -1490,6 +1519,14 @@ static void setupSerial1()
             Serial1.begin(115200, SERIAL_8N1, serial1RXpin, serial1TXpin, false);
             serial1IO = new SerialGPS(SERIAL1_PROTOCOL_TX, SERIAL1_PROTOCOL_RX);
             break;
+#if defined(WMEXTENSION)
+        case PROTOCOL_SERIAL1_ESCAPE32:
+            Serial1.begin(38400, SERIAL_8N1, serial1TXpin, serial1TXpin, false);
+            Serial1.setMode(UART_MODE_RS485_HALF_DUPLEX);
+            addPullupOpenDrain(serial1TXpin);
+            serial1IO = new SerialESCape32(SERIAL1_PROTOCOL_TX, SERIAL1_PROTOCOL_RX);
+            break;
+#endif
     }
 }
 
@@ -2087,6 +2124,21 @@ void loop()
     CheckConfigChangePending();
     executeDeferredFunction(micros());
 
+#if defined(WMEXTENSION)  
+# if defined(TARGET_RX)
+    if (connectionState == wifiUpdate) {
+        if (std::exchange(setupSerial1Special, false)) {
+            DBGLN("setupSerial1Special");
+            if (config.GetSerial1Protocol() != PROTOCOL_SERIAL1_ESCAPE32) {
+                config.SetSerial1Protocol(PROTOCOL_SERIAL1_ESCAPE32, false); // temporary change
+                reconfigureSerial1();
+                devicesTriggerEvent(EVENT_RUNTIME_RECONFIGURE_SERIAL);                
+            }
+        }
+    }
+# endif
+#endif
+    
     if (connectionState > MODE_STATES)
     {
         return;

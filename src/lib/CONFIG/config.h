@@ -326,7 +326,11 @@ public:
     void SetRateInitialIdx(uint8_t rateInitialIdx);
     void SetSerialProtocol(eSerialProtocol serialProtocol);
 #if defined(PLATFORM_ESP32)
+# if defined(WMEXTENSION)
+    void SetSerial1Protocol(eSerial1Protocol serial1Protocol, bool event = true);
+# else
     void SetSerial1Protocol(eSerial1Protocol serial1Protocol);
+# endif
 #endif
     void SetTeamraceChannel(uint8_t teamraceChannel);
     void SetTeamracePosition(uint8_t teamracePosition);

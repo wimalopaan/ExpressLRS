@@ -30,6 +30,10 @@ enum deviceEvent_t {
     EVENT_CONFIG_SERIAL_CHANGE = 1 << 17,
     EVENT_CONFIG_VERSION_CHANGED = 1 << 18,
 
+#if defined(WMEXTENSION)
+    EVENT_RUNTIME_RECONFIGURE_SERIAL = 1 << 20,
+#endif
+    
     EVENT_ALL = 0xFFFFFFFF
 };
 
