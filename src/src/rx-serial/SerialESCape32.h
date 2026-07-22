@@ -1,5 +1,7 @@
 #pragma once
 
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+
 #include "SerialIO.h"
 #include "esp_crc.h"
 
@@ -33,10 +35,9 @@ class SerialESCape32 : public SerialIO {
     static constexpr uint8_t CMD_UPDATE = 4;
     static constexpr uint8_t CMD_SETWRP = 5;
     
-    template<size_t Size = 2048>
+    template<size_t Size = (1024 + 32)>
     struct ESCape32Buffer {
         void clear() {
-            std::fill(std::begin(mData), std::end(mData), 0xff);
             mIndex = 0;
         }
         size_t length() const {
@@ -72,9 +73,7 @@ class SerialESCape32 : public SerialIO {
                 push(((uint8_t*)&crc)[i]);
             }
             return *this;
-            
         }
-
     private:
         void push(const uint8_t v) {
             if (mIndex < Size) {
@@ -149,10 +148,10 @@ private:
     
     State mState = State::Idle;
     bool mSkipFirstReceivedByte = false;
-    
     Parser mParser;
-
     ESCape32Buffer<>* mBuffer = nullptr;
+    
+    uint8_t mGoodCounter = 0;
     
     struct MultiBlockState {
         void reset() {
@@ -162,6 +161,6 @@ private:
         uint16_t mNumber{};
         uint32_t mPosition{};
     };
-    
     MultiBlockState mMultiBlockState;
 };
+#endif

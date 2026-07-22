@@ -3,6 +3,7 @@
 #include "config.h"
 #include "device.h"
 
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
 
 ESCape32Status escape32_status;
 
@@ -51,6 +52,12 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
             mState = State::Info;
         }
         else {
+            if (mGoodCounter > 0) {
+                --mGoodCounter;
+            }
+            else {
+                escape32_status.clear();           
+            }
             mState = State::Idle;
         }
         break;
@@ -64,11 +71,11 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
         break;
     case State::Read:
         if (mParser) {
-            mState = State::Idle;
+            mGoodCounter = 3;
         }
         else {
-            mState = State::Idle;
         }
+        mState = State::Idle;
         break;
     case State::Show:
         break;
@@ -76,10 +83,19 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
         mState = State::WriteBootloaderCheck;
         break;
     case State::WriteBootloaderCheck:
-        if (mParser) {
-            mState = State::WriteBootloader;
+        if (mParser && firmwareBuffer) {
+            mMultiBlockState.mPosition += 1024;
+            if (mMultiBlockState.mPosition >= firmwareBuffer->length) {
+                mState = State::Idle;
+                mMultiBlockState.reset();                
+                escape32_status.update = "Wrote Bootloader";                
+            }
+            else {
+                mState = State::WriteBootloader;
+            }
         }
         else {
+            escape32_status.update = "Bootloader failed";                
             mState = State::Idle;
         }
         break;
@@ -92,12 +108,14 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
                 mMultiBlockState.reset();
                 mMultiBlockState.mPosition = 2048;
                 mState = State::WriteFirmware;
+                escape32_status.update = "Signature erased";                
             }
             else {
                 mState = State::EraseSignature;
             }
         }
         else {
+            escape32_status.update = "Signature erase failed";                
             mState = State::Idle;
         }
         break;
@@ -105,17 +123,19 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
         mState = State::WriteFirmwareCheck;
         break;
     case State::WriteFirmwareCheck:
-        if (mParser) {
+        if (mParser && firmwareBuffer) {
             mMultiBlockState.mPosition += 1024;
             if (mMultiBlockState.mPosition >= firmwareBuffer->length) {
                 mState = State::WriteSignature;
                 mMultiBlockState.reset();                
+                escape32_status.update = "Wrote Firmware";                
             }
             else {
                 mState = State::WriteFirmware;
             }
         }
         else {
+            escape32_status.update = "Firmware failed";                
             mState = State::Idle;
         }
         break;        
@@ -128,12 +148,14 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
             if (mMultiBlockState.mPosition >= 2048) {
                 mState = State::Idle;
                 mMultiBlockState.reset();                
+                escape32_status.update = "Wrote Signature";                
             }
             else {
                 mState = State::WriteSignature;
             }
         }
         else {
+            escape32_status.update = "Write Signature failed";                
             mState = State::Idle;
         }
         break;
@@ -228,7 +250,14 @@ void SerialESCape32::read() {
 void SerialESCape32::sendBootloader(){
     if (firmwareBuffer && firmwareBuffer->isBootloader) {
         DBGLN("SerialESCape32::sendBoot: %s, p: %u", &firmwareBuffer->name[0], mMultiBlockState.mPosition);       
-            
+        mBuffer->clear();
+        if (mMultiBlockState.mPosition == 0) {
+            (*mBuffer) += CMD_UPDATE;
+        }
+        const uint32_t length = std::min((firmwareBuffer->length - mMultiBlockState.mPosition), 1024U);
+        (*mBuffer) += std::span{&firmwareBuffer->data[mMultiBlockState.mPosition], length};
+        send();
+        mParser.set(Parser::State::WriteBootloader);
     }
     else {
         DBGLN("SerialESCape32::sendBoot NO BOOTLOADER");       
@@ -254,14 +283,14 @@ void SerialESCape32::eraseSignature() {
 
 void SerialESCape32::sendFirmware(){
     if (firmwareBuffer && !firmwareBuffer->isBootloader) {
-        DBGLN("SerialESCape32::sendFW: %s, p: %u, l: %u", &firmwareBuffer->name[0], mMultiBlockState.mPosition, firmwareBuffer->length);       
         mBuffer->clear();
         (*mBuffer) += CMD_WRITE;
         (*mBuffer) += mMultiBlockState.mPosition / 1024;
-        (*mBuffer) += std::span{&firmwareBuffer->data[mMultiBlockState.mPosition], 1024};
+        const uint32_t length = std::min((firmwareBuffer->length - mMultiBlockState.mPosition), 1024U);
+        DBGLN("SerialESCape32::sendFW: %s, p: %u, fwl: %u, l: %u", &firmwareBuffer->name[0], mMultiBlockState.mPosition, firmwareBuffer->length, length);       
+        (*mBuffer) += std::span{&firmwareBuffer->data[mMultiBlockState.mPosition], length};
         send();
         mParser.set(Parser::State::EraseWriteFirmware);
-            
     }
     else {
         DBGLN("SerialESCape32::sendFW NO FIRMWARE");       
@@ -372,13 +401,16 @@ void SerialESCape32::Parser::read() {
         if ((mData[2] == 0xea) && (mData[3] == 0x32)) {
             mFWInfo.mRevision = mData[4];
             mFWInfo.mPatch = mData[5];
-            memcpy(&mFWInfo.mTarget[0], &mData[6], 16);
+            memcpy(&mFWInfo.mTarget[0], &mData[6], mFWInfo.mTarget.size() - 1);
             // DBGLN("Read: %u %s", mFWInfo.mRevision, &mFWInfo.mTarget[0]);
             escape32_status.firmware = String{"R"} + mFWInfo.mRevision + '.' + mFWInfo.mPatch;
             escape32_status.target = String{&mFWInfo.mTarget[0]};
             mState = State::Ok;
             escape32_status.actual = "Read OK";
             return;
+        }
+        else {
+            escape32_status.actual = "No Firmware";            
         }
     }    
     escape32_status.actual = "Read failed";
@@ -394,3 +426,4 @@ void SerialESCape32::processBytes(uint8_t* const bytes, const uint16_t size) {
         mParser.process(bytes[i]);
     }
 }
+#endif
