@@ -205,6 +205,10 @@ enum eServoOutputMode : uint8_t
     somPwm,         // 13: true PWM mode (NOT SUPPORTED)
     somSerial1RX,   // 14: secondary Serial RX
     somSerial1TX,   // 15: secondary Serial TX
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32)
+    somSerial2RX,   
+    somSerial2TX,   
+#endif
 };
 
 enum eServoOutputFailsafeMode : uint8_t
@@ -317,8 +321,16 @@ extern expresslrs_rf_pref_params_s *ExpressLRS_currAirRate_RFperfParams;
 
 #if defined(WMEXTENSION)
 struct FirmwareBuffer {
+    inline explicit FirmwareBuffer(const size_t size) : size{size}{
+        data = new uint8_t[size];
+    }
+    ~FirmwareBuffer() {
+        delete data;
+    }
+    const size_t size = 0;
     std::array<char, 64> name{};
-    std::array<uint8_t, (1 << 16)> data{};
+    // std::array<uint8_t, (1 << 16)> data{};
+    uint8_t* data = nullptr;
     uint32_t length{};
     bool isBootloader = false;
 };
@@ -331,11 +343,13 @@ struct ESCape32Status {
         bootloader = "---";
         target = "---";
         actual = "---";
+        update = "---";
     }
     String firmware;
     String bootloader;
     String target;
     String actual;
+    String update;
 };
 extern uint32_t ChannelData[CRSF_NUM_CHANNELS + CRSF_EXTRA_CHANNELS];
 extern FirmwareBuffer* firmwareBuffer;

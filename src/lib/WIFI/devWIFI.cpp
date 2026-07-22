@@ -42,7 +42,7 @@
 #if defined(TARGET_RX) && defined(PLATFORM_ESP32)
 #include "devVTXSPI.h"
 #endif
-#if defined(WMEXTENSION)
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
 #include "../../src/rx-serial/SerialESCape32.h"
 #endif
 #include "WebContent.h"
@@ -84,7 +84,7 @@ TcpMspConnector wifi2tcp;
 static bool scanComplete = false;
 #endif
 
-#if defined(WMEXTENSION)
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32)
 # if defined(TARGET_RX)
 FirmwareBuffer* firmwareBuffer = nullptr;
 extern ESCape32Status escape32_status;
@@ -113,7 +113,7 @@ void setWifiUpdateMode()
   InBindingMode = false;
   setConnectionState(wifiUpdate);
 
-#if defined(WMEXTENSION)      
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
       setupSerial1Special = true;
 #endif
 }
@@ -522,11 +522,12 @@ static void GetConfiguration(AsyncWebServerRequest *request)
 #if defined(TARGET_RX)
     settings["module-type"] = "RX";
     settings["voltage_source_count"] = getDefinedVoltageSourceCount();
-# if defined(WMEXTENSION)
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32)
     settings["escape32_fw"] = escape32_status.firmware;
     settings["escape32_bl"] = escape32_status.bootloader;
     settings["escape32_target"] = escape32_status.target;
     settings["escape32_status"] = escape32_status.actual;
+    settings["escape32_update"] = escape32_status.update;
 # endif
 #endif
 #if defined(RADIO_SX128X)
@@ -926,10 +927,21 @@ static void WebUploadDataHandler(AsyncWebServerRequest *request, const String& f
   }
 }
 
-#if defined(WMEXTENSION)
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
 static void ESCape32UploadResponseHandler(AsyncWebServerRequest *request) {
     DBGLN("ESCape32 update complete");
-    String msg = String("{\"OK\"}");
+    String msg;
+    if (firmwareBuffer && (firmwareBuffer->length > 0)) {
+        if (firmwareBuffer->isBootloader) {
+            msg = String("{\"status\": \"ok_boot\", \"msg\": \"Update complete.\"}");
+        }
+        else {
+            msg = String("{\"status\": \"ok\", \"msg\": \"Update complete.\"}");
+        }
+    }
+    else {
+        msg = String("{\"status\": \"error\", \"msg\": \"Update Failed.\"}");
+    }
     AsyncWebServerResponse *response = request->beginResponse(200, "application/json", msg);
     response->addHeader("Connection", "close");
     request->send(response);    
@@ -937,62 +949,58 @@ static void ESCape32UploadResponseHandler(AsyncWebServerRequest *request) {
 static void ESCape32UploadDataHandler(AsyncWebServerRequest *request, const String& filename, 
                                  size_t index, uint8_t *data, size_t len, bool final) {
     DBGLN("ESCape32 data handler: n: %s i: %u, l: %u, f: %d", filename.c_str(), index, len, (int)final);    
+    const size_t filesize = request->header("X-FileSize").toInt();        
     
+    if (firmwareBuffer && firmwareBuffer->size < filesize) {
+        DBGLN("ESCape32 data handler: delete buffer");
+        delete firmwareBuffer;
+        firmwareBuffer = nullptr;
+    }
     if (!firmwareBuffer) {
-        DBGLN("ESCape32 data handler: alloc buffer");
-        firmwareBuffer = new FirmwareBuffer;
+        DBGLN("ESCape32 data handler: alloc buffer: %u", filesize);
+        firmwareBuffer = new FirmwareBuffer(std::max(4096U, filesize)); // remains allocated until reboot
     }
     if (firmwareBuffer) {
-        if ((index + len) < firmwareBuffer->data.size()) {
+        if ((index + len) <= firmwareBuffer->size) {
+            DBGLN("ESCape32 data handler: copy: index: %u, len: %u, fs: %u", index, len, filesize);
             for(uint16_t i = 0; i < len; ++i) {
                 firmwareBuffer->data[index + i] = data[i];
             }
         }
         if (final) {
             firmwareBuffer->length = (index + len);
-            firmwareBuffer->isBootloader = false;
             strcpy(&firmwareBuffer->name[0], filename.c_str());
-            serialEvent(SerialEvent::WriteFirmware);
-        }
-        else {
-            firmwareBuffer->length = 0;
-        }
-    }
-}
-
-static void ESCape32BLResponseHandler(AsyncWebServerRequest *request) {
-    DBGLN("ESCape32 BL complete");
-    String msg = String("{\"OK\"}");
-    AsyncWebServerResponse *response = request->beginResponse(200, "application/json", msg);
-    response->addHeader("Connection", "close");
-    request->send(response);    
-}
-static void ESCape32BLDataHandler(AsyncWebServerRequest *request, const String& filename, 
-                                 size_t index, uint8_t *data, size_t len, bool final) {
-    DBGLN("ESCape32 BL handler: n: %s i: %u, l: %u, f: %d", filename.c_str(), index, len, (int)final);    
-    
-    if (!firmwareBuffer) {
-        DBGLN("ESCape32 BL handler: alloc buffer");
-        firmwareBuffer = new FirmwareBuffer;
-    }
-    if (firmwareBuffer) {
-        if ((index + len) < firmwareBuffer->data.size()) {
-            for(uint16_t i = 0; i < len; ++i) {
-                firmwareBuffer->data[index + i] = data[i];
+            DBGLN("ESCape32 data handler: final: l: %u: a: %x, b:%x", firmwareBuffer->length, firmwareBuffer->data[0], firmwareBuffer->data[1]);
+            if ((firmwareBuffer->data[1] == 0x32) && (firmwareBuffer->data[0] == 0xea) && (firmwareBuffer->length > 4096)) {
+                DBGLN("ESCape32 data handler: isFirmware");
+                firmwareBuffer->isBootloader = false;
+                serialEvent(SerialEvent::WriteFirmware);
+            }
+            else if (firmwareBuffer->length <= 4096) {
+                DBGLN("ESCape32 data handler: isBootloader");
+                if (!(firmwareBuffer->length & 1023) && firmwareBuffer->length != 4096) {
+                    DBGLN("ESCape32 data handler: augment");
+                    for(uint8_t i = 0; i < 4; ++i) {
+                        const uint16_t index = firmwareBuffer->length + i;
+                        if (index < firmwareBuffer->size) {
+                            firmwareBuffer->data[index] = 0xff;
+                        }
+                    }
+                    firmwareBuffer->length += 4; // Ensure last block marker
+                }
+                firmwareBuffer->isBootloader = true;
+                serialEvent(SerialEvent::WriteBootloader);
+            }
+            else {
+                firmwareBuffer->length = 0;
+                DBGLN("ESCape32 data handler: unrecognized");                
             }
         }
-        if (final) {
-            firmwareBuffer->length = (index + len);
-            firmwareBuffer->isBootloader = true;
-            strcpy(&firmwareBuffer->name[0], filename.c_str());
-            serialEvent(SerialEvent::WriteBootloader);
-        }
         else {
             firmwareBuffer->length = 0;
         }
     }
 }
-
 #endif
 
 static void WebUploadForceUpdateHandler(AsyncWebServerRequest *request) {
@@ -1270,8 +1278,6 @@ static void addCaptivePortalHandlers()
 
 static void startServices()
 {
-    DBGLN("startServices");
-    
   if (servicesStarted) {
     #if defined(PLATFORM_ESP32)
       MDNS.end();
@@ -1280,8 +1286,6 @@ static void startServices()
     return;
   }
 
-  DBGLN("startServices 2");
-  
   for (auto asset : WEB_ASSETS)
   {
       server.on(asset.path, WebUpdateSendContent);
@@ -1300,11 +1304,9 @@ static void startServices()
   server.on("/forceupdate", HTTP_OPTIONS, corsPreflightResponse);
   server.on("/cw", HandleContinuousWave);
 
-#if defined(WMEXTENSION)
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
   server.on("/ESCape32Upload", HTTP_POST, ESCape32UploadResponseHandler, ESCape32UploadDataHandler);
   server.on("/ESCape32Upload", HTTP_OPTIONS, corsPreflightResponse);  
-  server.on("/ESCape32UploadBL", HTTP_POST, ESCape32BLResponseHandler, ESCape32BLDataHandler);
-  server.on("/ESCape32UploadBL", HTTP_OPTIONS, corsPreflightResponse);  
 #endif
   
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
@@ -1521,11 +1523,7 @@ static int timeout()
     static bool pastAutoInterval = false;
     // If InBindingMode then wait at least 60 seconds before going into wifi,
     // regardless of if .wifi_auto_on_interval is set to less
-#if defined(WMAUTOWIFI)
-    if (!InBindingMode || firmwareOptions.wifi_auto_on_interval >= WMAUTOWIFI || pastAutoInterval)
-#else
     if (!InBindingMode || firmwareOptions.wifi_auto_on_interval >= 60000 || pastAutoInterval)
-#endif
     {
       setWifiUpdateMode();
 

@@ -28,7 +28,7 @@
 #include "rx-serial/SerialDisplayport.h"
 #include "rx-serial/SerialGPS.h"
 
-#if defined(WMEXTENSION)
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32)
 #include "rx-serial/SerialESCape32.h"
 #include "hal/gpio_hal.h"
 #include <utility>
@@ -1536,8 +1536,89 @@ void reconfigureSerial1()
     setupSerial1();
 }
 #else
-    void setupSerial1() {};
-    void reconfigureSerial1() {};
+void setupSerial1() {};
+void reconfigureSerial1() {};
+#endif
+
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32)
+static void setupSerial2() {
+    int8_t serial2RXpin = GPIO_PIN_SERIAL2_RX;
+    
+    if (serial2RXpin == UNDEF_PIN)
+    {
+        for (uint8_t ch = 0; ch < GPIO_PIN_PWM_OUTPUTS_COUNT; ch++)
+        {
+            if (config.GetPwmChannel(ch)->val.mode == somSerial2RX)
+                serial2RXpin = GPIO_PIN_PWM_OUTPUTS[ch];
+        }
+    }
+    
+    int8_t serial2TXpin = GPIO_PIN_SERIAL2_TX;
+    
+    if (serial2TXpin == UNDEF_PIN)
+    {
+        for (uint8_t ch = 0; ch < GPIO_PIN_PWM_OUTPUTS_COUNT; ch++)
+        {
+            if (config.GetPwmChannel(ch)->val.mode == somSerial2TX)
+                serial2TXpin = GPIO_PIN_PWM_OUTPUTS[ch];
+        }
+    }
+    
+    DBGLN("setupSerial2: p: %u, tx: %u", config.GetSerial2Protocol(), serial2TXpin);
+    
+    switch(config.GetSerial2Protocol())
+    {
+    case PROTOCOL_SERIAL2_OFF:
+        break;
+    case PROTOCOL_SERIAL2_CRSF:
+        Serial2.begin(firmwareOptions.uart_baud, SERIAL_8N1, serial2RXpin, serial2TXpin, false);
+        serial2IO = new SerialCRSF(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        break;
+    case PROTOCOL_SERIAL2_INVERTED_CRSF:
+        Serial2.begin(firmwareOptions.uart_baud, SERIAL_8N1, serial2RXpin, serial2TXpin, true);
+        serial2IO = new SerialCRSF(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        break;
+    case PROTOCOL_SERIAL2_SBUS:
+    case PROTOCOL_SERIAL2_DJI_RS_PRO:
+        Serial2.begin(100000, SERIAL_8E2, UNDEF_PIN, serial2TXpin, true);
+        serial2IO = new SerialSBUS(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        break;
+    case PROTOCOL_SERIAL2_INVERTED_SBUS:
+        Serial2.begin(100000, SERIAL_8E2, UNDEF_PIN, serial2TXpin, false);
+        serial2IO = new SerialSBUS(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        break;
+    case PROTOCOL_SERIAL2_SUMD:
+        Serial2.begin(115200, SERIAL_8N1, UNDEF_PIN, serial2TXpin, false);
+        serial2IO = new SerialSUMD3(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        break;
+    case PROTOCOL_SERIAL2_HOTT_TLM:
+        Serial2.begin(19200, SERIAL_8N2, serial2RXpin, serial2TXpin, false);
+        serial2IO = new SerialHoTT_TLM(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX, serial2TXpin);
+        break;
+    case PROTOCOL_SERIAL2_TRAMP:
+        Serial2.begin(9600, SERIAL_8N1, UNDEF_PIN, serial2TXpin, false);
+        serial2IO = new SerialTramp(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX, serial2TXpin);
+        break;
+    case PROTOCOL_SERIAL2_SMARTAUDIO:
+        Serial2.begin(4800, SERIAL_8N2, UNDEF_PIN, serial2TXpin, false);
+        serial2IO = new SerialSmartAudio(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX, serial2TXpin);
+        break;
+    case PROTOCOL_SERIAL2_MSP_DISPLAYPORT:
+        Serial2.begin(115200, SERIAL_8N1, UNDEF_PIN, serial2TXpin, false);
+        serial2IO = new SerialDisplayport(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        break;
+    case PROTOCOL_SERIAL2_GPS:
+        Serial2.begin(115200, SERIAL_8N1, serial2RXpin, serial2TXpin, false);
+        serial2IO = new SerialGPS(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        break;
+    case PROTOCOL_SERIAL2_ESCAPE32:
+        Serial2.begin(38400, SERIAL_8N1, serial2TXpin, serial2TXpin, false);
+        Serial2.setMode(UART_MODE_RS485_HALF_DUPLEX);
+        addPullupOpenDrain(serial2TXpin);
+        serial2IO = new SerialESCape32(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        break;
+    }
+}    
 #endif
 
 static void serialShutdown()
@@ -2124,7 +2205,7 @@ void loop()
     CheckConfigChangePending();
     executeDeferredFunction(micros());
 
-#if defined(WMEXTENSION)  
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32)
 # if defined(TARGET_RX)
     if (connectionState == wifiUpdate) {
         if (std::exchange(setupSerial1Special, false)) {
