@@ -28,6 +28,8 @@ class UpdatePanel extends LitElement {
                     <tr><td><b>Target</b></td><td>${elrsState.settings.escape32_target}</td></tr>
                     <tr><td><b>Status</b></td><td>${elrsState.settings.escape32_status}</td></tr>
                     <tr><td><b>Update</b></td><td>${elrsState.settings.escape32_update}</td></tr>
+                    <tr><td><b>Input</b></td><td>${elrsState.settings.escape32_input}</td></tr>
+                    <tr><td><b>Telemetry</b></td><td>${elrsState.settings.escape32_telem}</td></tr>
                     </tbody>
                 </table>
             </div>
