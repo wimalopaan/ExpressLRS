@@ -39,12 +39,14 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
     switch(mState) {
     case State::Start:
         mState = State::AsciiPreIdle;
+        mChangeInputTelemMode = false;
         break;
     case State::Idle:
         mState = State::Probe;
         onSerialEvent(SerialEvent::WriteBootloader, [&]{
             mMultiBlockState.reset();
-            mState = State::WriteBootloader;
+            // mState = State::WriteBootloader;
+            mState = State::ResetWriteProtection;
         });
         onSerialEvent(SerialEvent::WriteFirmware, [&]{
             mMultiBlockState.reset();
@@ -76,10 +78,24 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
     case State::Read:
         if (mParser) {
             mGoodCounter = 3;
+            mState = State::Idle;
         }
         else {
+            mState = State::Idle;
         }
-        mState = State::Idle;
+        break;
+    case State::ResetWriteProtection:
+        mState = State::ResetWriteProtectionCheck;
+        break;
+    case State::ResetWriteProtectionCheck:
+        if (mParser) {
+            escape32_status.update = "Unlock Bootloader";                
+            mState = State::WriteBootloader;
+        }
+        else {
+            escape32_status.update = "Unlock Bootloader failed";                
+            mState = State::Idle;
+        }
         break;
     case State::WriteBootloader:
         mState = State::WriteBootloaderCheck;
@@ -88,9 +104,9 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
         if (mParser && firmwareBuffer) {
             mMultiBlockState.mPosition += 1024;
             if (mMultiBlockState.mPosition >= firmwareBuffer->length) {
-                mState = State::Idle;
                 mMultiBlockState.reset();                
                 escape32_status.update = "Wrote Bootloader";                
+                mState = State::SetWriteProtection;
             }
             else {
                 mState = State::WriteBootloader;
@@ -98,6 +114,19 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
         }
         else {
             escape32_status.update = "Bootloader failed";                
+            mState = State::Idle;
+        }
+        break;
+    case State::SetWriteProtection:
+        mState = State::SetWriteProtectionCheck;
+        break;
+    case State::SetWriteProtectionCheck:
+        if (mParser) {
+            escape32_status.update = "Writeprotect Bootloader";                
+            mState = State::Idle;
+        }
+        else {
+            escape32_status.update = "Writeprotect Bootloader failed";                
             mState = State::Idle;
         }
         break;
@@ -150,6 +179,7 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
             if (mMultiBlockState.mPosition >= 2048) {
                 mMultiBlockState.reset();                
                 escape32_status.update = "Wrote Signature";                
+                mChangeInputTelemMode = true;
                 mState = State::AsciiPreIdle;
             }
             else {
@@ -196,7 +226,12 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
         break;
     case State::AsciiGetTelemModeCheck:
         if (mParser) {
-            mState = State::SetCrsfInputMode;
+            if (mChangeInputTelemMode) {
+                mState = State::SetCrsfInputMode;
+            }
+            else {
+                mState = State::Idle;
+            }
         }
         else {
             mState = State::Idle;
@@ -253,11 +288,21 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
         case State::Read:
             read();
             break;
+        case State::ResetWriteProtection:
+            setWriteProtection(0x33); // all off
+            break;
+        case State::ResetWriteProtectionCheck:
+            break;
         case State::WriteBootloader:
             sendBootloader();
             break;        
         case State::WriteBootloaderCheck:
             break;        
+        case State::SetWriteProtection:
+            setWriteProtection(0x44); // protect bootloader
+            break;
+        case State::SetWriteProtectionCheck:
+            break;
         case State::EraseSignature:
             eraseSignature();
             break;
@@ -349,7 +394,14 @@ void SerialESCape32::read() {
     send();
     mParser.set(Parser::State::Read);    
 }
-
+void SerialESCape32::setWriteProtection(const uint8_t wrp) {
+    DBGLN("SerialESCape32::set write protection: %u", wrp);   
+    mBuffer->clear();
+    (*mBuffer) += CMD_SETWRP;
+    (*mBuffer) += wrp;
+    send();    
+    mParser.set(Parser::State::Probe);
+}
 void SerialESCape32::sendBootloader(){
     if (firmwareBuffer && firmwareBuffer->isBootloader) {
         DBGLN("SerialESCape32::sendBoot: %s, p: %u", &firmwareBuffer->name[0], mMultiBlockState.mPosition);       
