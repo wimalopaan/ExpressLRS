@@ -27,7 +27,7 @@ enum class SerialEvent : uint8_t {
 void serialEvent(SerialEvent e);
 
 class SerialESCape32 : public SerialIO {
-    static constexpr auto ESCAPE32_CALLBACK_INTERVAL_MS = 50;
+    static constexpr auto ESCAPE32_CALLBACK_INTERVAL_MS = 50; // must be suffcient to read whole response
     static constexpr auto PreIdleWait_MS = 2500;
     static constexpr auto PreIdleWaitCount = PreIdleWait_MS / ESCAPE32_CALLBACK_INTERVAL_MS;
     static constexpr uint8_t CMD_PROBE  = 0;
@@ -95,6 +95,8 @@ class SerialESCape32 : public SerialIO {
         SetCrsfInputModeCheck,
         SetCrsfTelemMode,
         SetCrsfTelemModeCheck,
+        ResetWriteProtection,
+        ResetWriteProtectionCheck,
         WriteBootloader,
         WriteBootloaderCheck,
         EraseSignature,
@@ -103,6 +105,8 @@ class SerialESCape32 : public SerialIO {
         WriteFirmwareCheck,
         WriteSignature,
         WriteSignatureCheck,
+        SetWriteProtection,
+        SetWriteProtectionCheck,
         AsciiPreIdle,
         AsciiPreIdleWait,
         AsciiInfo,
@@ -176,6 +180,8 @@ private:
     void info();
     void read();
     
+    void setWriteProtection(uint8_t);
+    
     void sendBootloader();
     
     void eraseSignature();
@@ -183,6 +189,7 @@ private:
     
     State mState = State::Start;
     uint16_t mStateCounter = 0;
+    bool mChangeInputTelemMode = false;
     
     bool mSkipFirstReceivedByte = false;
     Parser mParser;
