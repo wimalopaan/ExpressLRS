@@ -28,6 +28,8 @@ void serialEvent(SerialEvent e);
 
 class SerialESCape32 : public SerialIO {
     static constexpr auto ESCAPE32_CALLBACK_INTERVAL_MS = 50;
+    static constexpr auto PreIdleWait_MS = 2500;
+    static constexpr auto PreIdleWaitCount = PreIdleWait_MS / ESCAPE32_CALLBACK_INTERVAL_MS;
     static constexpr uint8_t CMD_PROBE  = 0;
     static constexpr uint8_t CMD_INFO   = 1;
     static constexpr uint8_t CMD_READ   = 2;
@@ -84,13 +86,15 @@ class SerialESCape32 : public SerialIO {
         std::array<uint8_t, Size> mData{};
     };    
     enum class State : uint8_t {
+        Start,
         Idle,
         Probe,
         Info,
         Read,
-        Show,
         SetCrsfInputMode,
+        SetCrsfInputModeCheck,
         SetCrsfTelemMode,
+        SetCrsfTelemModeCheck,
         WriteBootloader,
         WriteBootloaderCheck,
         EraseSignature,
@@ -99,6 +103,16 @@ class SerialESCape32 : public SerialIO {
         WriteFirmwareCheck,
         WriteSignature,
         WriteSignatureCheck,
+        AsciiPreIdle,
+        AsciiPreIdleWait,
+        AsciiInfo,
+        AsciiInfoCkeck,
+        AsciiGetInputMode,
+        AsciiGetInputModeCheck,
+        AsciiGetTelemMode,
+        AsciiGetTelemModeCheck,
+        AsciiSave,
+        AsciiSaveCheck
     };
     struct Parser {
         struct BootLoaderInfo {
@@ -111,7 +125,15 @@ class SerialESCape32 : public SerialIO {
             uint8_t mPatch{};
             std::array<char, 16> mTarget{};            
         };
-        enum class State : uint8_t {Idle, Probe, Info, Read, EraseWriteFirmware, WriteBootloader, Ok, Error};
+        struct ConfigInfo {
+            uint8_t mInputMode{};
+            uint8_t mTelemMode{};
+        };
+
+        enum class State : uint8_t {Idle, Probe, Info, Read, 
+                                    EraseWriteFirmware, WriteBootloader, 
+                                    Ascii,
+                                    Ok, Error};
         void process(const uint8_t b);
         void set(const State s);
         explicit operator bool() const;
@@ -120,6 +142,8 @@ class SerialESCape32 : public SerialIO {
         void writeOK();
         void info();
         void read();
+        void parseAsciiOk();
+        void parseAsciiModes();
         uint8_t valueAt(uint8_t index);
         bool checkData(uint16_t payloadLength);
         State mState = State::Idle;
@@ -127,6 +151,7 @@ class SerialESCape32 : public SerialIO {
         std::array<uint8_t, 64> mData{};
         BootLoaderInfo mBLInfo;
         FirmwareInfo mFWInfo;
+        ConfigInfo mCfgInfo;
     };
 public:
     explicit SerialESCape32(Stream &out, Stream &in);
@@ -136,7 +161,17 @@ protected:
     void processBytes(uint8_t *bytes, uint16_t size) override;
 private:
     void send();
-    void show();
+    void send(const String&);
+    
+    void getInputSetting();
+    void getTelemSetting();
+    void asciiInfo();
+    
+    void setCrsfInputMode();
+    void setCrsfTelemMode();
+    
+    void save();
+    
     void probe();
     void info();
     void read();
@@ -146,13 +181,14 @@ private:
     void eraseSignature();
     void sendFirmware();
     
-    State mState = State::Idle;
+    State mState = State::Start;
+    uint16_t mStateCounter = 0;
+    
     bool mSkipFirstReceivedByte = false;
     Parser mParser;
     ESCape32Buffer<>* mBuffer = nullptr;
     
     uint8_t mGoodCounter = 0;
-    
     struct MultiBlockState {
         void reset() {
             mNumber = 0;
