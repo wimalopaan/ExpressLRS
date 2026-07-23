@@ -344,12 +344,16 @@ struct ESCape32Status {
         target = "---";
         actual = "---";
         update = "---";
+        input = "---";
+        telem = "---";
     }
     String firmware;
     String bootloader;
     String target;
     String actual;
     String update;
+    String input;
+    String telem;
 };
 extern uint32_t ChannelData[CRSF_NUM_CHANNELS + CRSF_EXTRA_CHANNELS];
 extern FirmwareBuffer* firmwareBuffer;

@@ -528,6 +528,8 @@ static void GetConfiguration(AsyncWebServerRequest *request)
     settings["escape32_target"] = escape32_status.target;
     settings["escape32_status"] = escape32_status.actual;
     settings["escape32_update"] = escape32_status.update;
+    settings["escape32_input"] = escape32_status.input;
+    settings["escape32_telem"] = escape32_status.telem;
 # endif
 #endif
 #if defined(RADIO_SX128X)
