@@ -18,6 +18,9 @@ extern void reconfigureSerial();
 #if defined(PLATFORM_ESP32)
 extern void reconfigureSerial1();
 #endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+extern void reconfigureSerial2();
+#endif
 extern bool BindingModeRequest;
 
 extern RXEndpoint crsfReceiver;
@@ -32,7 +35,11 @@ char strPowerLevels[] = "10;25;50;100;250;500;1000;2000;MatchTX ";
 char strPowerLevels[] = "10;25;50;100;250;500;1000;2000;MatchTX ";
 #endif
 static char modelString[] = "000";
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+static char pwmModes[] = "50Hz;60Hz;100Hz;160Hz;333Hz;400Hz;10kHzDuty;On/Off;DShot;DShot 3D;Serial RX;Serial TX;I2C SCL;I2C SDA;Serial2 RX;Serial2 TX; Serial3 RX; Serial3 TX";
+#else
 static char pwmModes[] = "50Hz;60Hz;100Hz;160Hz;333Hz;400Hz;10kHzDuty;On/Off;DShot;DShot 3D;Serial RX;Serial TX;I2C SCL;I2C SDA;Serial2 RX;Serial2 TX";
+#endif
 
 static selectionParameter luaSerialProtocol = {
     {"Protocol", CRSF_TEXT_SELECTION},
@@ -44,6 +51,15 @@ static selectionParameter luaSerialProtocol = {
 #if defined(PLATFORM_ESP32)
 static selectionParameter luaSerial1Protocol = {
     {"Protocol2", CRSF_TEXT_SELECTION},
+    0, // value
+    "Off;CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;DJI RS Pro;HoTT Telemetry;Tramp;SmartAudio;DisplayPort;GPS;ESCape32",
+    STR_EMPTYSPACE
+};
+#endif
+
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+static selectionParameter luaSerial2Protocol = {
+    {"Protocol3", CRSF_TEXT_SELECTION},
     0, // value
     "Off;CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;DJI RS Pro;HoTT Telemetry;Tramp;SmartAudio;DisplayPort;GPS;ESCape32",
     STR_EMPTYSPACE
@@ -212,6 +228,10 @@ void RXEndpoint::luaparamMappingChannelOut(propertiesCommon *item, uint8_t arg)
 #if defined(PLATFORM_ESP32)
     bool serial1rxAssigned = false;
     bool serial1txAssigned = false;
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+#endif
+    bool serial2rxAssigned = false;
+    bool serial2txAssigned = false;
 #endif
 
     const char *no1Option    = ";";
@@ -227,7 +247,12 @@ void RXEndpoint::luaparamMappingChannelOut(propertiesCommon *item, uint8_t arg)
     const char *serial1_BOTH = ";Serial2 RX;Serial2 TX";
     const char *dshot        = ";DShot;DShot 3D";
 #endif
-
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    const char *serial2_RX   = ";Serial3 RX;";
+    const char *serial2_TX   = ";;Serial3 TX";
+    const char *serial2_BOTH = ";Serial3 RX;Serial3 TX";
+#endif
+    
     const char *pModeString;
 
 
@@ -252,6 +277,13 @@ void RXEndpoint::luaparamMappingChannelOut(propertiesCommon *item, uint8_t arg)
       if (mode == somSerial1TX)
         serial1txAssigned = true;
 #endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+      if (mode == somSerial2RX)
+        serial2rxAssigned = true;
+
+      if (mode == somSerial2TX)
+        serial2txAssigned = true;
+#endif      
     }
 
     setUint8Value(&luaMappingChannelOut, arg);
@@ -366,7 +398,6 @@ void RXEndpoint::luaparamMappingChannelOut(propertiesCommon *item, uint8_t arg)
         {
             pModeString = serial1_TX;
         }
-
         else if (!serial1rxAssigned && !serial1txAssigned)
         {
             pModeString = serial1_BOTH;
@@ -382,7 +413,51 @@ void RXEndpoint::luaparamMappingChannelOut(propertiesCommon *item, uint8_t arg)
     }
     strcat(pwmModes, pModeString);
 #endif
-
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    // ternary Serial pins (2 options)
+    // ;[SERIAL3 RX] ;[SERIAL3_TX]
+    if (!OPT_PWM_OUT_ONLY && (GPIO_PIN_SERIAL2_RX != UNDEF_PIN || GPIO_PIN_SERIAL2_TX != UNDEF_PIN))
+    {
+        // If the target defines Serial2 RX/TX then those pins MUST be used
+        if (GPIO_PIN_PWM_OUTPUTS[arg-1] == GPIO_PIN_SERIAL2_RX)
+        {
+            pModeString = serial2_RX;
+        }
+        else if (GPIO_PIN_PWM_OUTPUTS[arg-1] == GPIO_PIN_SERIAL2_TX)
+        {
+            pModeString = serial2_TX;
+        }
+        else
+        {
+            pModeString = no2Options;
+        }
+    }
+    else if (!OPT_PWM_OUT_ONLY)
+    {   // otherwise allow any pin to be either RX or TX but only once
+        if (serial2txAssigned && !serial2rxAssigned)
+        {
+            pModeString = serial2_RX;
+        }
+        else if (serial2rxAssigned && !serial2txAssigned)
+        {
+            pModeString = serial2_TX;
+        }
+        else if (!serial2rxAssigned && !serial2txAssigned)
+        {
+            pModeString = serial2_BOTH;
+        }
+        else
+        {
+            pModeString = no2Options;
+        }
+    }
+    else
+    {
+        pModeString = no2Options;
+    }
+    strcat(pwmModes, pModeString);
+#endif
+    
     // trim off trailing semicolons (assumes pwmModes has at least 1 non-semicolon)
     for (auto lastPos = strlen(pwmModes)-1; pwmModes[lastPos] == ';'; lastPos--)
     {
@@ -536,6 +611,17 @@ void RXEndpoint::registerParameters()
   }
 #endif
 
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+  registerParameter(&luaSerial2Protocol, [](propertiesCommon* item, uint8_t arg){
+    config.SetSerial2Protocol((eSerial2Protocol)arg);
+    if (config.IsModified()) {
+      deferExecutionMillis(100, [](){
+        reconfigureSerial2();
+      });
+    }
+  });
+#endif
+  
   registerParameter(&luaSBUSFailsafeMode, [](propertiesCommon* item, uint8_t arg){
     config.SetFailsafeMode((eFailsafeMode)arg);
   });
@@ -617,7 +703,10 @@ void RXEndpoint::updateParameters()
     setTextSelectionValue(&luaSerial1Protocol, config.GetSerial1Protocol());
   }
 #endif
-
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+  setTextSelectionValue(&luaSerial2Protocol, config.GetSerial2Protocol());
+#endif
+  
   setTextSelectionValue(&luaSBUSFailsafeMode, config.GetFailsafeMode());
 
   if (GPIO_PIN_ANT_CTRL != UNDEF_PIN)

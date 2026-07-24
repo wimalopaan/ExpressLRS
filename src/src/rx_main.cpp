@@ -99,6 +99,9 @@ device_affinity_t ui_devices[] = {
   {&Serial1_device, 1},
   {&SerialUpdate_device, 1},
 #endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    {&Serial2_device, 1},
+#endif    
   {&LED_device, 0},
   {&RXLUA_device, 0},
   {&RGB_device, 0},
@@ -147,6 +150,12 @@ uint32_t serialBaud;
 #endif
 
 SerialIO *serialIO = nullptr;
+
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+SerialIO *serial2IO = nullptr;
+#define SERIAL2_PROTOCOL_TX Serial2
+#define SERIAL2_PROTOCOL_RX Serial2
+#endif
 
 #define SERIAL_PROTOCOL_RX Serial
 #define SERIAL1_PROTOCOL_RX Serial1
@@ -1519,7 +1528,7 @@ static void setupSerial1()
             Serial1.begin(115200, SERIAL_8N1, serial1RXpin, serial1TXpin, false);
             serial1IO = new SerialGPS(SERIAL1_PROTOCOL_TX, SERIAL1_PROTOCOL_RX);
             break;
-#if defined(WMEXTENSION)
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
         case PROTOCOL_SERIAL1_ESCAPE32:
             Serial1.begin(38400, SERIAL_8N1, serial1TXpin, serial1TXpin, false);
             Serial1.setMode(UART_MODE_RS485_HALF_DUPLEX);
@@ -1540,7 +1549,16 @@ void setupSerial1() {};
 void reconfigureSerial1() {};
 #endif
 
-#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32)
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+static void serial2Shutdown()
+{
+    if(serial2IO != nullptr)
+    {
+        Serial2.end();
+        delete serial2IO;
+        serial2IO = nullptr;
+    }
+}
 static void setupSerial2() {
     int8_t serial2RXpin = GPIO_PIN_SERIAL2_RX;
     
@@ -1565,6 +1583,10 @@ static void setupSerial2() {
     }
     
     DBGLN("setupSerial2: p: %u, tx: %u", config.GetSerial2Protocol(), serial2TXpin);
+    
+    if ((serial2TXpin == UNDEF_PIN) || (serial2RXpin == UNDEF_PIN)) {
+        return;
+    }
     
     switch(config.GetSerial2Protocol())
     {
@@ -1619,6 +1641,11 @@ static void setupSerial2() {
         break;
     }
 }    
+void reconfigureSerial2()
+{
+    serial2Shutdown();
+    setupSerial2();
+}
 #endif
 
 static void serialShutdown()
@@ -2151,6 +2178,9 @@ void setup()
         crsfRouter.addConnector(&otaConnector);
         setupSerial();
         setupSerial1();
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+        setupSerial2();
+#endif        
 
         devicesRegister(ui_devices, ARRAY_SIZE(ui_devices));
         devicesInit();

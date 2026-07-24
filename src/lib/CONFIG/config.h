@@ -234,12 +234,20 @@ typedef union {
                  inputChannel:4, // 0-based input channel
 #endif
                  inverted:1,     // invert channel output
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+                 mode:5,         // Output mode (eServoOutputMode)
+#else
                  mode:4,         // Output mode (eServoOutputMode)
+#endif
                  stretched:1,    // expand the channel input to 500us - 2500us
                  narrow:1,       // Narrow output mode (half pulse width)
                  failsafeMode:2, // failsafe output mode (eServoOutputFailsafeMode)
 #if defined(WMEXTENSION) && defined(WMCRSF_CHAN_EXT)
-            unused:7;       // FUTURE: When someone complains "everyone" uses inverted polarity PWM or something :/
+         #if defined(WMSERIAL2)
+                 unused:6;       // FUTURE: When someone complains "everyone" uses inverted polarity PWM or something :/
+         #else
+                 unused:7;       // FUTURE: When someone complains "everyone" uses inverted polarity PWM or something :/
+         #endif      
 #else
             unused:8;       // FUTURE: When someone complains "everyone" uses inverted polarity PWM or something :/
 #endif
@@ -252,7 +260,11 @@ typedef struct __attribute__((packed)) {
     uint8_t     uid[UID_LEN];
     uint8_t     unused_padding;
     uint8_t     serial1Protocol:4,  // secondary serial protocol
+    #if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+                serial2Protocol:4;
+    #else
                 serial1Protocol_unused:4;
+    #endif
     uint32_t    flash_discriminator;
     struct __attribute__((packed)) {
         uint16_t    scale;          // FUTURE: Override compiled vbat scale
@@ -304,6 +316,9 @@ public:
 #if defined(PLATFORM_ESP32)
     eSerial1Protocol GetSerial1Protocol() const { return (eSerial1Protocol)m_config.serial1Protocol; }
 #endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    eSerial2Protocol GetSerial2Protocol() const { return (eSerial2Protocol)m_config.serial2Protocol; }
+#endif
     uint8_t GetTeamraceChannel() const { return m_config.teamraceChannel; }
     uint8_t GetTeamracePosition() const { return m_config.teamracePosition; }
     eFailsafeMode GetFailsafeMode() const { return (eFailsafeMode)m_config.failsafeMode; }
@@ -332,6 +347,10 @@ public:
     void SetSerial1Protocol(eSerial1Protocol serial1Protocol);
 # endif
 #endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    void SetSerial2Protocol(eSerial2Protocol serial2Protocol);
+#endif
+    
     void SetTeamraceChannel(uint8_t teamraceChannel);
     void SetTeamracePosition(uint8_t teamracePosition);
     void SetFailsafeMode(eFailsafeMode failsafeMode);

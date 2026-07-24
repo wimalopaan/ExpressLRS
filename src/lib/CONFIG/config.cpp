@@ -1410,6 +1410,16 @@ void RxConfig::SetSerial1Protocol(eSerial1Protocol serialProtocol)
 }
 #endif
 #endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+void RxConfig::SetSerial2Protocol(eSerial2Protocol serialProtocol)
+{
+    if (m_config.serial2Protocol != serialProtocol)
+    {
+        m_config.serial2Protocol = serialProtocol;
+        m_modified = EVENT_CONFIG_SERIAL_CHANGE;
+    }
+}
+#endif
 
 void RxConfig::SetTeamraceChannel(uint8_t teamraceChannel)
 {
