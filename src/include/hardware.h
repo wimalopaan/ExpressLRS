@@ -8,7 +8,11 @@ typedef enum {
     HARDWARE_serial_tx,
     HARDWARE_serial1_rx,
     HARDWARE_serial1_tx,
-
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    HARDWARE_serial2_rx,
+    HARDWARE_serial2_tx,
+#endif
+    
     // Radio
     HARDWARE_radio_busy,
     HARDWARE_radio_busy_2,
