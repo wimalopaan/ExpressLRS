@@ -14,6 +14,9 @@ extern SerialIO *serialIO;
 #if defined(PLATFORM_ESP32)
 extern SerialIO *serial1IO;
 #endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+extern SerialIO *serial2IO;
+#endif
 
 enum teamraceOutputInhibitState_e {
     troiPass = 0,               // Allow all packets through, normal operation
@@ -35,6 +38,9 @@ static devserial_ctx_t serial0;
 #if defined(PLATFORM_ESP32)
 static devserial_ctx_t serial1;
 #endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+static devserial_ctx_t serial2;
+#endif
 
 void ICACHE_RAM_ATTR crsfRCFrameAvailable()
 {
@@ -42,6 +48,9 @@ void ICACHE_RAM_ATTR crsfRCFrameAvailable()
 #if defined(PLATFORM_ESP32)
     serial1.frameAvailable = true;
 #endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    serial2.frameAvailable = true;
+#endif    
 }
 
 void ICACHE_RAM_ATTR crsfRCFrameMissed()
@@ -50,6 +59,9 @@ void ICACHE_RAM_ATTR crsfRCFrameMissed()
 #if defined(PLATFORM_ESP32)
     serial1.frameMissed = true;
 #endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    serial2.frameMissed = true;
+#endif    
 }
 
 static int start()
@@ -60,7 +72,10 @@ static int start()
     serial1.io = &serial1IO;
     serial1.lastConnectionState = disconnected;
 #endif
-
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    serial2.io = &serial2IO;
+    serial2.lastConnectionState = disconnected;
+#endif
     return DURATION_IMMEDIATELY;
 }
 
@@ -98,6 +113,13 @@ static int event0()
 static int event1()
 {
     return event(&serial1);
+}
+#endif
+
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+static int event2()
+{
+    return event(&serial2);
 }
 #endif
 
@@ -282,6 +304,18 @@ void sendImmediateRC()
         (*(serial1.io))->sendRCFrame(sendChannels, missed, ChannelData);
     }
 #endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    if (*(serial2.io) != nullptr && (*(serial2.io))->sendImmediateRC() && connectionState != serialUpdate)
+    {
+        const bool missed = serial2.frameMissed;
+        serial2.frameMissed = false;
+
+        // Verify the new channel data should be sent on
+        const bool sendChannels = confirmFrameAvailable(&serial2);
+
+        (*(serial2.io))->sendRCFrame(sendChannels, missed, ChannelData);
+    }
+#endif    
 }
 
 void handleSerialIO()
@@ -299,6 +333,13 @@ void handleSerialIO()
         (*(serial1.io))->sendQueuedData((*(serial1.io))->getMaxSerialWriteSize());
     }
 #endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    if (*(serial2.io) != nullptr)
+    {
+        (*(serial2.io))->processSerialInput();
+        (*(serial2.io))->sendQueuedData((*(serial2.io))->getMaxSerialWriteSize());
+    }
+#endif    
 }
 
 static int timeout0()
@@ -310,6 +351,12 @@ static int timeout0()
 static int timeout1()
 {
   return timeout(&serial1);
+}
+#endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+static int timeout2()
+{
+  return timeout(&serial2);
 }
 #endif
 
@@ -332,6 +379,15 @@ device_t Serial1_device = {
     #else
     .subscribe = EVENT_CONNECTION_CHANGED | EVENT_CONFIG_MODEL_CHANGED
     #endif
+};
+#endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+device_t Serial2_device = {
+    .initialize = nullptr,
+    .start = start,
+    .event = event2,
+    .timeout = timeout2,
+    .subscribe = EVENT_CONNECTION_CHANGED | EVENT_CONFIG_MODEL_CHANGED | EVENT_RUNTIME_RECONFIGURE_SERIAL
 };
 #endif
 
