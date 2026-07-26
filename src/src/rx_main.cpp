@@ -1456,6 +1456,7 @@ static void serial1Shutdown()
     }
 }
 
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
 static void  addPullupOpenDrain(const uint8_t pin) {
     static constexpr gpio_hal_context_t _gpio_hal = {
         .dev = GPIO_HAL_GET_HW(GPIO_PORT_0)
@@ -1466,6 +1467,7 @@ static void  addPullupOpenDrain(const uint8_t pin) {
     // pinMode(serial1TXpin, OPEN_DRAIN | PULLUP);
     // pinMode(serial1TXpin, OUTPUT_OPEN_DRAIN);
 }
+#endif
 
 static void setupSerial1()
 {
@@ -1655,12 +1657,14 @@ static void setupSerial2() {
         Serial2.begin(115200, SERIAL_8N1, serial2RXpin, serial2TXpin, false);
         serial2IO = new SerialGPS(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
         break;
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
     case PROTOCOL_SERIAL2_ESCAPE32:
         Serial2.begin(38400, SERIAL_8N1, serial2TXpin, serial2TXpin, false);
         Serial2.setMode(UART_MODE_RS485_HALF_DUPLEX);
         addPullupOpenDrain(serial2TXpin);
         serial2IO = new SerialESCape32(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
         break;
+#endif
     }
 }    
 void reconfigureSerial2()
