@@ -349,7 +349,7 @@ public:
 # endif
 #endif
 #if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
-    void SetSerial2Protocol(eSerial2Protocol serial2Protocol);
+    void SetSerial2Protocol(eSerial2Protocol serial2Protocol, bool event = true);
 #endif
     
     void SetTeamraceChannel(uint8_t teamraceChannel);

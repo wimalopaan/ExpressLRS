@@ -87,7 +87,7 @@ static bool scanComplete = false;
 #if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32)
 # if defined(TARGET_RX)
 FirmwareBuffer* firmwareBuffer = nullptr;
-extern ESCape32Status escape32_status;
+extern std::array<ESCape32Status, 2> escape32_status;
 # endif
 #endif
 
@@ -114,7 +114,7 @@ void setWifiUpdateMode()
   setConnectionState(wifiUpdate);
 
 #if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
-      setupSerial1Special = true;
+      reconfigureSerials = true;
 #endif
 }
 
@@ -574,13 +574,14 @@ static void GetConfiguration(AsyncWebServerRequest *request)
     settings["module-type"] = "RX";
     settings["voltage_source_count"] = getDefinedVoltageSourceCount();
 #if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32)
-    settings["escape32_fw"] = escape32_status.firmware;
-    settings["escape32_bl"] = escape32_status.bootloader;
-    settings["escape32_target"] = escape32_status.target;
-    settings["escape32_status"] = escape32_status.actual;
-    settings["escape32_update"] = escape32_status.update;
-    settings["escape32_input"] = escape32_status.input;
-    settings["escape32_telem"] = escape32_status.telem;
+    settings["escape32_fw"] = String{"[Serial1]: "} + escape32_status[0].firmware + String{"; [Serial2]: "} + escape32_status[1].firmware;
+    settings["escape32_bl"] = String{"[Serial1]: "} + escape32_status[0].bootloader + String{"; [Serial2]: "} + escape32_status[1].bootloader;
+    settings["escape32_target"] = String{"[Serial1]: "} + escape32_status[0].target + String{"; [Serial2]: "} + escape32_status[1].target;
+    settings["escape32_status"] = String{"[Serial1]: "} + escape32_status[0].actual + String{"; [Serial2]: "} + escape32_status[1].actual;
+    settings["escape32_update"] = String{"[Serial1]: "} + escape32_status[0].update + String{"; [Serial2]: "} + escape32_status[1].update;
+    settings["escape32_input"] = String{"[Serial1]: "} + escape32_status[0].input + String{"; [Serial2]: "} + escape32_status[1].input;
+    settings["escape32_telem"] = String{"[Serial1]: "} + escape32_status[0].telem + String{"; [Serial2]: "} + escape32_status[1].telem;
+    settings["escape32_id"] = String{"[Serial1]: "} + escape32_status[0].id + String{"; [Serial2]: "} + escape32_status[1].id;
 # endif
 #endif
 #if defined(RADIO_SX127X)
