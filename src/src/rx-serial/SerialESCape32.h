@@ -3,10 +3,11 @@
 #if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
 
 #include "SerialIO.h"
+#include "common.h"
 #include "esp_crc.h"
 
 #ifdef __cpp_lib_span
-#include <span>
+# include <span>
 #else 
 namespace std {
     struct span {
@@ -16,7 +17,31 @@ namespace std {
 }
 #endif
 
-extern volatile bool setupSerial1Special;
+extern volatile bool reconfigureSerials;
+
+struct ESCape32Status {
+    ESCape32Status() {
+        clear();
+    }
+    void clear() {
+        firmware = "---";
+        bootloader = "---";
+        target = "---";
+        actual = "---";
+        update = "---";
+        input = "---";
+        telem = "---";
+        id = "---";
+    }
+    String firmware;
+    String bootloader;
+    String target;
+    String actual;
+    String update;
+    String input;
+    String telem;
+    String id;
+};
 
 enum class SerialEvent : uint8_t {
     None            = 0,
@@ -95,6 +120,8 @@ class SerialESCape32 : public SerialIO {
         SetCrsfInputModeCheck,
         SetCrsfTelemMode,
         SetCrsfTelemModeCheck,
+        SetCrsfTelemID,
+        SetCrsfTelemIDCheck,
         ResetWriteProtection,
         ResetWriteProtectionCheck,
         WriteBootloader,
@@ -115,10 +142,17 @@ class SerialESCape32 : public SerialIO {
         AsciiGetInputModeCheck,
         AsciiGetTelemMode,
         AsciiGetTelemModeCheck,
+        AsciiGetTelemID,
+        AsciiGetTelemIDCheck,
         AsciiSave,
         AsciiSaveCheck
     };
     struct Parser {
+        inline explicit Parser(ESCape32Status& status) : escape32_status{status} {
+        }
+        inline ~Parser() {
+            escape32_status.clear();
+        }
         struct BootLoaderInfo {
             uint8_t mRevision{};
             uint8_t mPin{};
@@ -132,8 +166,8 @@ class SerialESCape32 : public SerialIO {
         struct ConfigInfo {
             uint8_t mInputMode{};
             uint8_t mTelemMode{};
+            uint8_t mTelemID{};
         };
-
         enum class State : uint8_t {Idle, Probe, Info, Read, 
                                     EraseWriteFirmware, WriteBootloader, 
                                     Ascii,
@@ -141,6 +175,7 @@ class SerialESCape32 : public SerialIO {
         void process(const uint8_t b);
         void set(const State s);
         explicit operator bool() const;
+        ESCape32Status& escape32_status;
     private:
         void probe();
         void writeOK();
@@ -158,7 +193,7 @@ class SerialESCape32 : public SerialIO {
         ConfigInfo mCfgInfo;
     };
 public:
-    explicit SerialESCape32(Stream &out, Stream &in);
+    explicit SerialESCape32(Stream &out, Stream &in, ESCape32Status& status, SerialEvent& event, uint8_t telem_id);
     ~SerialESCape32() override;
     uint32_t sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t *channelData) override;
 protected:
@@ -169,10 +204,12 @@ private:
     
     void getInputSetting();
     void getTelemSetting();
+    void getTelemID();
     void asciiInfo();
     
     void setCrsfInputMode();
     void setCrsfTelemMode();
+    void setCrsfTelemID();
     
     void save();
     
@@ -194,6 +231,8 @@ private:
     bool mSkipFirstReceivedByte = false;
     Parser mParser;
     ESCape32Buffer<>* mBuffer = nullptr;
+    SerialEvent& mEvent;
+    uint8_t mTelemID;
     
     uint8_t mGoodCounter = 0;
     struct MultiBlockState {
