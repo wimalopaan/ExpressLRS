@@ -29,9 +29,9 @@
 #include "rx-serial/SerialGPS.h"
 
 #if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32)
-#include "rx-serial/SerialESCape32.h"
-#include "hal/gpio_hal.h"
-#include <utility>
+# include "rx-serial/SerialESCape32.h"
+# include "hal/gpio_hal.h"
+# include <utility>
 # if !defined(__cpp_lib_exchange_function)
 namespace std {
     template<class T, class U = T>
@@ -42,6 +42,8 @@ namespace std {
     }
 }
 # endif
+std::array<ESCape32Status, 2> escape32_status{};
+std::array<SerialEvent, 2>    serial_events{SerialEvent::None, SerialEvent::None};
 #endif
 
 #include "devAnalogVbat.h"
@@ -1557,7 +1559,7 @@ static void setupSerial1()
             Serial1.begin(38400, SERIAL_8N1, serial1TXpin, serial1TXpin, false);
             Serial1.setMode(UART_MODE_RS485_HALF_DUPLEX);
             addPullupOpenDrain(serial1TXpin);
-            serial1IO = new SerialESCape32(SERIAL1_PROTOCOL_TX, SERIAL1_PROTOCOL_RX);
+            serial1IO = new SerialESCape32(SERIAL1_PROTOCOL_TX, SERIAL1_PROTOCOL_RX, escape32_status[0], serial_events[0], 1);
             break;
 #endif
     }
@@ -1662,7 +1664,7 @@ static void setupSerial2() {
         Serial2.begin(38400, SERIAL_8N1, serial2TXpin, serial2TXpin, false);
         Serial2.setMode(UART_MODE_RS485_HALF_DUPLEX);
         addPullupOpenDrain(serial2TXpin);
-        serial2IO = new SerialESCape32(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        serial2IO = new SerialESCape32(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX, escape32_status[1], serial_events[1], 2);
         break;
 #endif
     }
@@ -2272,14 +2274,32 @@ void loop()
     CheckConfigChangePending();
     executeDeferredFunction(micros());
 
-#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32)
-# if defined(TARGET_RX)
+    // The following isn't possible, because sending and receiving 
+    // on Serial1 and simultaneously on Serial2 isn't possible.
+    // The receiving UART dors not receive bytes von the other is sending.
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+# if defined(WMESCAPE32_USE_SIMULTANEOUSLY)
     if (connectionState == wifiUpdate) {
-        if (std::exchange(setupSerial1Special, false)) {
-            DBGLN("setupSerial1Special");
+        if (std::exchange(reconfigureSerials, false)) {
+            DBGLN("reconfigureSerials");
+            bool needEvent = false;
             if (config.GetSerial1Protocol() != PROTOCOL_SERIAL1_ESCAPE32) {
-                config.SetSerial1Protocol(PROTOCOL_SERIAL1_ESCAPE32, false); // temporary change
-                reconfigureSerial1();
+                if (config.GetSerial1Protocol() == PROTOCOL_SERIAL1_CRSF) {
+                    config.SetSerial1Protocol(PROTOCOL_SERIAL1_ESCAPE32, false); // temporary change
+                    reconfigureSerial1();
+                    needEvent = true;
+                }
+            }
+#  if defined(WMSERIAL2)
+            if (config.GetSerial2Protocol() != PROTOCOL_SERIAL2_ESCAPE32) {
+                if (config.GetSerial2Protocol() == PROTOCOL_SERIAL2_CRSF) {
+                    config.SetSerial2Protocol(PROTOCOL_SERIAL2_ESCAPE32, false); // temporary change
+                    reconfigureSerial2();
+                    needEvent = true;
+                }
+            }
+#  endif
+            if (needEvent) {
                 devicesTriggerEvent(EVENT_RUNTIME_RECONFIGURE_SERIAL);                
             }
         }

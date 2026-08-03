@@ -360,31 +360,9 @@ struct FirmwareBuffer {
     }
     const size_t size = 0;
     std::array<char, 64> name{};
-    // std::array<uint8_t, (1 << 16)> data{};
     uint8_t* data = nullptr;
     uint32_t length{};
     bool isBootloader = false;
-};
-struct ESCape32Status {
-    ESCape32Status() {
-        clear();
-    }
-    void clear() {
-        firmware = "---";
-        bootloader = "---";
-        target = "---";
-        actual = "---";
-        update = "---";
-        input = "---";
-        telem = "---";
-    }
-    String firmware;
-    String bootloader;
-    String target;
-    String actual;
-    String update;
-    String input;
-    String telem;
 };
 extern uint32_t ChannelData[CRSF_NUM_CHANNELS + CRSF_EXTRA_CHANNELS];
 extern FirmwareBuffer* firmwareBuffer;

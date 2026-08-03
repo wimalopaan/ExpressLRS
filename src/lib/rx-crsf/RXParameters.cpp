@@ -49,10 +49,14 @@ static selectionParameter luaSerialProtocol = {
 };
 
 #if defined(PLATFORM_ESP32)
+static char serialModes[]   = "Off;CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;DJI RS Pro;HoTT Telemetry;Tramp;SmartAudio;DisplayPort;GPS;ESCape32";
+# if !defined(WMESCAPE32_USE_SIMULTANEOUSLY)
+static char serialModes_s[] = "Off;CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;DJI RS Pro;HoTT Telemetry;Tramp;SmartAudio;DisplayPort;GPS";
+# endif
 static selectionParameter luaSerial1Protocol = {
     {"Protocol2", CRSF_TEXT_SELECTION},
     0, // value
-    "Off;CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;DJI RS Pro;HoTT Telemetry;Tramp;SmartAudio;DisplayPort;GPS;ESCape32",
+    serialModes,
     STR_EMPTYSPACE
 };
 #endif
@@ -61,7 +65,7 @@ static selectionParameter luaSerial1Protocol = {
 static selectionParameter luaSerial2Protocol = {
     {"Protocol3", CRSF_TEXT_SELECTION},
     0, // value
-    "Off;CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;DJI RS Pro;HoTT Telemetry;Tramp;SmartAudio;DisplayPort;GPS;ESCape32",
+    serialModes,
     STR_EMPTYSPACE
 };
 #endif
@@ -608,7 +612,18 @@ void RXEndpoint::registerParameters()
   if (RX_HAS_SERIAL1)
   {
     registerParameter(&luaSerial1Protocol, [](propertiesCommon* item, uint8_t arg){
-      config.SetSerial1Protocol((eSerial1Protocol)arg);
+      const eSerial1Protocol proto = (eSerial1Protocol)arg;
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+# if !defined(WMESCAPE32_USE_SIMULTANEOUSLY)
+      if (proto == PROTOCOL_SERIAL1_ESCAPE32) {
+        luaSerial2Protocol.options = serialModes_s;    
+      }
+      else {
+        luaSerial2Protocol.options = serialModes;    
+      }
+# endif
+#endif
+      config.SetSerial1Protocol(proto);
       if (config.IsModified()) {
         deferExecutionMillis(100, [](){
           reconfigureSerial1();
@@ -620,7 +635,16 @@ void RXEndpoint::registerParameters()
 
 #if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
   registerParameter(&luaSerial2Protocol, [](propertiesCommon* item, uint8_t arg){
-    config.SetSerial2Protocol((eSerial2Protocol)arg);
+    const eSerial2Protocol proto = (eSerial2Protocol)arg;
+# if !defined(WMESCAPE32_USE_SIMULTANEOUSLY)
+    if (proto == PROTOCOL_SERIAL2_ESCAPE32) {
+      luaSerial1Protocol.options = serialModes_s;    
+    }
+    else {
+      luaSerial1Protocol.options = serialModes;    
+    }
+# endif
+    config.SetSerial2Protocol(proto);
     if (config.IsModified()) {
       deferExecutionMillis(100, [](){
         reconfigureSerial2();

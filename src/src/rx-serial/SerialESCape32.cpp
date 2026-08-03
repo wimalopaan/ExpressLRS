@@ -5,32 +5,31 @@
 
 #if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
 
-ESCape32Status escape32_status;
+volatile bool reconfigureSerials = false;
 
-volatile bool setupSerial1Special = false;
-
-static SerialEvent serial_evt = SerialEvent::None;
+extern std::array<SerialEvent, 2> serial_events;
 
 void serialEvent(const SerialEvent e) {
     DBGLN("SerialEvent: %u", (uint8_t)e);
-    serial_evt = SerialEvent((uint8_t)serial_evt | (uint8_t)e);
+    for(SerialEvent& serial_evt: serial_events) {
+        serial_evt = SerialEvent((uint8_t)serial_evt | (uint8_t)e);
+    }
 }
-
 template<typename F>
-void onSerialEvent(const SerialEvent e, F f) {
+static void onSerialEvent(SerialEvent& serial_evt, const SerialEvent e, F f) {
     if ((uint8_t)serial_evt & (uint8_t)e) {
         f();
         serial_evt = SerialEvent((uint8_t)serial_evt & ~((uint8_t)e));        
     }
 }
-
-SerialESCape32::SerialESCape32(Stream &out, Stream &in) : 
-    SerialIO{&out, &in}, mBuffer{new ESCape32Buffer<>} {
+SerialESCape32::SerialESCape32(Stream &out, Stream &in, ESCape32Status& status, SerialEvent& event, const uint8_t telem_id) : 
+    SerialIO{&out, &in}, mParser{status}, mBuffer{new ESCape32Buffer<>}, mEvent{event}, mTelemID{telem_id} {
     DBGLN("SerialESCape32");
+    mEvent = SerialEvent::None;
 }
-
 SerialESCape32::~SerialESCape32() {
     delete mBuffer;
+    mEvent = SerialEvent::None;
 }
 uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t *channelData) {
     // DBGLN("SerialESCape32::sendRCFrame");
@@ -43,12 +42,11 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
         break;
     case State::Idle:
         mState = State::Probe;
-        onSerialEvent(SerialEvent::WriteBootloader, [&]{
+        onSerialEvent(mEvent, SerialEvent::WriteBootloader, [&]{
             mMultiBlockState.reset();
-            // mState = State::WriteBootloader;
             mState = State::ResetWriteProtection;
         });
-        onSerialEvent(SerialEvent::WriteFirmware, [&]{
+        onSerialEvent(mEvent, SerialEvent::WriteFirmware, [&]{
             mMultiBlockState.reset();
             mState = State::EraseSignature;
         });
@@ -62,7 +60,7 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
                 --mGoodCounter;
             }
             else {
-                escape32_status.clear();           
+                mParser.escape32_status.clear();           
             }
             mState = State::Idle;
         }
@@ -89,11 +87,11 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
         break;
     case State::ResetWriteProtectionCheck:
         if (mParser) {
-            escape32_status.update = "Unlock Bootloader";                
+            mParser.escape32_status.update = "Unlock Bootloader";                
             mState = State::WriteBootloader;
         }
         else {
-            escape32_status.update = "Unlock Bootloader failed";                
+            mParser.escape32_status.update = "Unlock Bootloader failed";                
             mState = State::Idle;
         }
         break;
@@ -105,7 +103,7 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
             mMultiBlockState.mPosition += 1024;
             if (mMultiBlockState.mPosition >= firmwareBuffer->length) {
                 mMultiBlockState.reset();                
-                escape32_status.update = "Wrote Bootloader";                
+                mParser.escape32_status.update = "Wrote Bootloader";                
                 mState = State::SetWriteProtection;
             }
             else {
@@ -113,7 +111,7 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
             }
         }
         else {
-            escape32_status.update = "Bootloader failed";                
+            mParser.escape32_status.update = "Bootloader failed";                
             mState = State::Idle;
         }
         break;
@@ -122,11 +120,11 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
         break;
     case State::SetWriteProtectionCheck:
         if (mParser) {
-            escape32_status.update = "Writeprotect Bootloader";                
+            mParser.escape32_status.update = "Writeprotect Bootloader";                
             mState = State::Idle;
         }
         else {
-            escape32_status.update = "Writeprotect Bootloader failed";                
+            mParser.escape32_status.update = "Writeprotect Bootloader failed";                
             mState = State::Idle;
         }
         break;
@@ -139,14 +137,14 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
                 mMultiBlockState.reset();
                 mMultiBlockState.mPosition = 2048;
                 mState = State::WriteFirmware;
-                escape32_status.update = "Signature erased";                
+                mParser.escape32_status.update = "Signature erased";                
             }
             else {
                 mState = State::EraseSignature;
             }
         }
         else {
-            escape32_status.update = "Signature erase failed";                
+            mParser.escape32_status.update = "Signature erase failed";                
             mState = State::Idle;
         }
         break;
@@ -159,14 +157,14 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
             if (mMultiBlockState.mPosition >= firmwareBuffer->length) {
                 mState = State::WriteSignature;
                 mMultiBlockState.reset();                
-                escape32_status.update = "Wrote Firmware";                
+                mParser.escape32_status.update = "Wrote Firmware";                
             }
             else {
                 mState = State::WriteFirmware;
             }
         }
         else {
-            escape32_status.update = "Firmware failed";                
+            mParser.escape32_status.update = "Firmware failed";                
             mState = State::Idle;
         }
         break;        
@@ -178,7 +176,7 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
             mMultiBlockState.mPosition += 1024;
             if (mMultiBlockState.mPosition >= 2048) {
                 mMultiBlockState.reset();                
-                escape32_status.update = "Wrote Signature";                
+                mParser.escape32_status.update = "Wrote Signature";                
                 mChangeInputTelemMode = true;
                 mState = State::AsciiPreIdle;
             }
@@ -187,7 +185,7 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
             }
         }
         else {
-            escape32_status.update = "Write Signature failed";                
+            mParser.escape32_status.update = "Write Signature failed";                
             mState = State::Idle;
         }
         break;
@@ -226,6 +224,17 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
         break;
     case State::AsciiGetTelemModeCheck:
         if (mParser) {
+            mState = State::AsciiGetTelemID;
+        }
+        else {
+            mState = State::Idle;
+        }
+        break;
+    case State::AsciiGetTelemID:
+        mState = State::AsciiGetTelemIDCheck;
+        break;
+    case State::AsciiGetTelemIDCheck:
+        if (mParser) {
             if (mChangeInputTelemMode) {
                 mState = State::SetCrsfInputMode;
             }
@@ -252,6 +261,17 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
         mState = State::SetCrsfTelemModeCheck;
         break;
     case State::SetCrsfTelemModeCheck:
+        if (mParser) {
+            mState = State::SetCrsfTelemID;
+        }
+        else {
+            mState = State::Idle;
+        }
+        break;
+    case State::SetCrsfTelemID:
+        mState = State::SetCrsfTelemIDCheck;
+        break;
+    case State::SetCrsfTelemIDCheck:
         if (mParser) {
             mState = State::AsciiSave;
         }
@@ -337,6 +357,11 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
             break;
         case State::AsciiGetTelemModeCheck:
             break;
+        case State::AsciiGetTelemID:
+            getTelemID();
+            break;
+        case State::AsciiGetTelemIDCheck:
+            break;
         case State::SetCrsfInputMode:
             setCrsfInputMode();
             break;
@@ -346,6 +371,11 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
             setCrsfTelemMode();
             break;
         case State::SetCrsfTelemModeCheck:
+            break;
+        case State::SetCrsfTelemID:
+            setCrsfTelemID();
+            break;
+        case State::SetCrsfTelemIDCheck:
             break;
         case State::AsciiSave:
             save();
@@ -359,29 +389,33 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
 
 void SerialESCape32::send() {
     if (mBuffer) {
-        _outputPort->write(mBuffer->data(), mBuffer->length());        
-        _outputPort->flush();
         mSkipFirstReceivedByte = true; // we allways receie a meaningless first byte
+        _outputPort->write(mBuffer->data(), mBuffer->length());        
+#if !defined(WMESCAPE32_USE_SIMULTANEOUSLY)
+        _outputPort->flush();
+#endif
     }
 }
 void SerialESCape32::send(const String& s) {
-    _outputPort->write(s.c_str(), s.length());        
-    _outputPort->flush();    
     mSkipFirstReceivedByte = true; // we allways receie a meaningless first byte
+    _outputPort->write(s.c_str(), s.length());        
+#if !defined(WMESCAPE32_USE_SIMULTANEOUSLY)
+    _outputPort->flush();    
+#endif
 }
 void SerialESCape32::probe() {
-    // DBGLN("SerialESCape32::probe");   
+    DBGLN("SerialESCape32::probe");   
     mBuffer->clear();
     (*mBuffer) += CMD_PROBE;
-    send();
     mParser.set(Parser::State::Probe);
+    send();
 }
 void SerialESCape32::info() {
     // DBGLN("SerialESCape32::info");   
     mBuffer->clear();
     (*mBuffer) += CMD_INFO;
-    send();
     mParser.set(Parser::State::Info);
+    send();
 }
 void SerialESCape32::read() {
     // DBGLN("SerialESCape32::read");   
@@ -391,16 +425,16 @@ void SerialESCape32::read() {
     (*mBuffer) += CMD_READ;
     (*mBuffer) += start;
     (*mBuffer) += len;
-    send();
     mParser.set(Parser::State::Read);    
+    send();
 }
 void SerialESCape32::setWriteProtection(const uint8_t wrp) {
     DBGLN("SerialESCape32::set write protection: %u", wrp);   
     mBuffer->clear();
     (*mBuffer) += CMD_SETWRP;
     (*mBuffer) += wrp;
-    send();    
     mParser.set(Parser::State::Probe);
+    send();    
 }
 void SerialESCape32::sendBootloader(){
     if (firmwareBuffer && firmwareBuffer->isBootloader) {
@@ -411,8 +445,8 @@ void SerialESCape32::sendBootloader(){
         }
         const uint32_t length = std::min((firmwareBuffer->length - mMultiBlockState.mPosition), 1024U);
         (*mBuffer) += std::span{&firmwareBuffer->data[mMultiBlockState.mPosition], length};
-        send();
         mParser.set(Parser::State::WriteBootloader);
+        send();
     }
     else {
         DBGLN("SerialESCape32::sendBoot NO BOOTLOADER");       
@@ -428,8 +462,8 @@ void SerialESCape32::eraseSignature() {
         std::array<uint8_t, 8> data;
         std::fill(std::begin(data), std::end(data), 0xff);
         (*mBuffer) += data;
-        send();
         mParser.set(Parser::State::EraseWriteFirmware);
+        send();
     }
     else {
         DBGLN("SerialESCape32::eraseSig NO FIRMWARE");       
@@ -444,8 +478,8 @@ void SerialESCape32::sendFirmware(){
         const uint32_t length = std::min((firmwareBuffer->length - mMultiBlockState.mPosition), 1024U);
         DBGLN("SerialESCape32::sendFW: %s, p: %u, fwl: %u, l: %u", &firmwareBuffer->name[0], mMultiBlockState.mPosition, firmwareBuffer->length, length);       
         (*mBuffer) += std::span{&firmwareBuffer->data[mMultiBlockState.mPosition], length};
-        send();
         mParser.set(Parser::State::EraseWriteFirmware);
+        send();
     }
     else {
         DBGLN("SerialESCape32::sendFW NO FIRMWARE");       
@@ -454,46 +488,59 @@ void SerialESCape32::sendFirmware(){
 
 void SerialESCape32::asciiInfo() {
     DBGLN("SerialESCape32::asciiInfo");   
-    send(String{"info\n"});
     mParser.set(Parser::State::Ascii);
+    send(String{"info\n"});
 }
 void SerialESCape32::getInputSetting() {
     DBGLN("SerialESCape32::getInputSetting");   
-    send(String{"get input_mode\n"});
     mParser.set(Parser::State::Ascii);
+    send(String{"get input_mode\n"});
 }
 void SerialESCape32::getTelemSetting() {
     DBGLN("SerialESCape32::getTelemSetting");   
-    send(String{"get telem_mode\n"});
     mParser.set(Parser::State::Ascii);
+    send(String{"get telem_mode\n"});
+}
+void SerialESCape32::getTelemID() {
+    DBGLN("SerialESCape32::getTelemID");   
+    mParser.set(Parser::State::Ascii);
+    send(String{"get telem_phid\n"});
 }
 void SerialESCape32::setCrsfInputMode(){
     DBGLN("SerialESCape32::setCrsfInputMode");   
-    send(String{"set input_mode 5\n"});
     mParser.set(Parser::State::Ascii);    
+    send(String{"set input_mode 5\n"});
 }
 void SerialESCape32::setCrsfTelemMode(){
     DBGLN("SerialESCape32::setCrsfTelemMode");   
-    send(String{"set telem_mode 4\n"});
     mParser.set(Parser::State::Ascii);    
+    send(String{"set telem_mode 4\n"});
+}
+void SerialESCape32::setCrsfTelemID(){
+    DBGLN("SerialESCape32::setCrsfTelemID");   
+    mParser.set(Parser::State::Ascii);    
+    send(String{"set telem_phid "} + mTelemID + "\n");
 }
 void SerialESCape32::save(){
     DBGLN("SerialESCape32::save");   
-    send(String{"save\n"});
     mParser.set(Parser::State::Ascii);    
+    send(String{"save\n"});
 }
 void SerialESCape32::Parser::set(const State s){
     mState = s;
     mIndex = 0;
 }
 SerialESCape32::Parser::operator bool() const {
-    return mState == State::Ok;
+    return !(mState == State::Error);
 }
 void SerialESCape32::Parser::process(const uint8_t b){
+    DBGLN("proc %u %u", b, mIndex);
     if (mIndex < mData.size()) {
         mData[mIndex++] = b;
     }
     switch(mState) {
+    case State::Idle:
+        break;
     case State::Probe:
         if (mIndex == 2) {
             probe();
@@ -530,7 +577,9 @@ void SerialESCape32::Parser::process(const uint8_t b){
             mIndex = 0;
         }
         break;
-    default:
+    case State::Ok:
+        break;
+    case State::Error:
         break;
     }
 }
@@ -539,8 +588,8 @@ void SerialESCape32::Parser::parseAsciiModes() {
     char modeString[16];
     uint32_t mode = -1;
     sscanf((const char*)&mData[0], "%15s %u", modeString, &mode);
-    if (strncmp(modeString, "input", strlen("input")) == 0) {
-        DBGLN("AsciiModes: input: %u", mode);
+    if (strncmp(modeString, "input_m", strlen("input_m")) == 0) {
+        DBGLN("AsciiModes: input_mode: %u", mode);
         mCfgInfo.mInputMode = mode;
         switch(mode) {
         case 0:
@@ -572,8 +621,8 @@ void SerialESCape32::Parser::parseAsciiModes() {
             break;
         }
     }
-    else if (strncmp(modeString, "telem", strlen("telem")) == 0) {
-        DBGLN("AsciiModes: telem: %u", mode);
+    else if (strncmp(modeString, "telem_m", strlen("telem_m")) == 0) {
+        DBGLN("AsciiModes: telem_mode: %u", mode);
         mCfgInfo.mTelemMode = mode;
         switch(mode) {
         case 0:
@@ -602,6 +651,11 @@ void SerialESCape32::Parser::parseAsciiModes() {
             break;
         }
     }
+    else if (strncmp(modeString, "telem_phid", strlen("telem_phid")) == 0) {
+        DBGLN("AsciiModes: telem_phid: %u", mode);
+        mCfgInfo.mTelemID = mode;
+        escape32_status.id = String{mode};
+    }
 }
 
 void SerialESCape32::Parser::parseAsciiOk() {
@@ -619,8 +673,10 @@ void SerialESCape32::Parser::probe() {
     if (valueAt(0) == 0x00) {
         mState = State::Ok;
         escape32_status.actual = "Connected";
+        DBGLN("probe ok");
     }
     else {
+        DBGLN("probe error");
         mState = State::Error;
     }
 }
@@ -652,11 +708,12 @@ bool SerialESCape32::Parser::checkData(const uint16_t payloadLength) {
 }
 
 void SerialESCape32::Parser::info() {
+    DBGLN("Info");
     if (checkData(32)) {
         mBLInfo.mRevision = mData[2];
         mBLInfo.mPin = mData[3];
         mBLInfo.mMcu = mData[4] | (mData[5] << 8) | (mData[6] << 16) | (mData[7] << 24);
-        // DBGLN("BL Rev: %u, IO: %u, MCU: %u", mBLInfo.mRevision, mBLInfo.mPin, mBLInfo.mMcu);
+        DBGLN("BL Rev: %u, IO: %u, MCU: %u", mBLInfo.mRevision, mBLInfo.mPin, mBLInfo.mMcu);
         escape32_status.bootloader = String{"R"} + mBLInfo.mRevision;
         mState = State::Ok;
         escape32_status.actual = "Read OK";
@@ -666,12 +723,13 @@ void SerialESCape32::Parser::info() {
     mState = State::Error;
 }
 void SerialESCape32::Parser::read() {
+    DBGLN("Read");
     if (checkData(20)) {
         if ((mData[2] == 0xea) && (mData[3] == 0x32)) {
             mFWInfo.mRevision = mData[4];
             mFWInfo.mPatch = mData[5];
             memcpy(&mFWInfo.mTarget[0], &mData[6], mFWInfo.mTarget.size() - 1);
-            // DBGLN("Read: %u %s", mFWInfo.mRevision, &mFWInfo.mTarget[0]);
+            DBGLN("Read: %u %s", mFWInfo.mRevision, &mFWInfo.mTarget[0]);
             escape32_status.firmware = String{"R"} + mFWInfo.mRevision + '.' + mFWInfo.mPatch;
             escape32_status.target = String{&mFWInfo.mTarget[0]};
             mState = State::Ok;
@@ -687,12 +745,13 @@ void SerialESCape32::Parser::read() {
 }
 
 void SerialESCape32::processBytes(uint8_t* const bytes, const uint16_t size) {
-    if (mSkipFirstReceivedByte) {
-        mSkipFirstReceivedByte = false;
-        return;
-    }
     for(uint16_t i = 0; i < size; ++i) {
-        mParser.process(bytes[i]);
+        if (mSkipFirstReceivedByte) {
+            mSkipFirstReceivedByte = false;
+        }
+        else {
+            mParser.process(bytes[i]);
+        }
     }
 }
 #endif

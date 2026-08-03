@@ -1412,12 +1412,14 @@ void RxConfig::SetSerial1Protocol(eSerial1Protocol serialProtocol)
 #endif
 #endif
 #if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
-void RxConfig::SetSerial2Protocol(eSerial2Protocol serialProtocol)
+void RxConfig::SetSerial2Protocol(const eSerial2Protocol serialProtocol, const bool event)
 {
     if (m_config.serial2Protocol != serialProtocol)
     {
         m_config.serial2Protocol = serialProtocol;
-        m_modified = EVENT_CONFIG_SERIAL_CHANGE;
+        if (event) {
+            m_modified = EVENT_CONFIG_SERIAL_CHANGE;
+        }
     }
 }
 #endif
