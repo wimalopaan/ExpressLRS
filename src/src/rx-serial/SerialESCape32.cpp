@@ -47,8 +47,15 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
             mState = State::ResetWriteProtection;
         });
         onSerialEvent(mEvent, SerialEvent::WriteFirmware, [&]{
-            mMultiBlockState.reset();
-            mState = State::EraseSignature;
+            if (checkTarget()) {
+                DBGLN("SerialESCape32: target checked");
+                mMultiBlockState.reset();
+                mState = State::EraseSignature;
+            }
+            else {
+                DBGLN("SerialESCape32: wrong target");
+                mParser.escape32_status.update = "Wrong target";
+            }
         });
         break;
     case State::Probe:
@@ -404,7 +411,7 @@ void SerialESCape32::send(const String& s) {
 #endif
 }
 void SerialESCape32::probe() {
-    DBGLN("SerialESCape32::probe");   
+    // DBGLN("SerialESCape32::probe");   
     mBuffer->clear();
     (*mBuffer) += CMD_PROBE;
     mParser.set(Parser::State::Probe);
@@ -452,7 +459,6 @@ void SerialESCape32::sendBootloader(){
         DBGLN("SerialESCape32::sendBoot NO BOOTLOADER");       
     }
 }
-
 void SerialESCape32::eraseSignature() {
     if (firmwareBuffer && !firmwareBuffer->isBootloader) {
         DBGLN("SerialESCape32::eraseSig: %s, p: %u", &firmwareBuffer->name[0], mMultiBlockState.mPosition);       
@@ -469,7 +475,6 @@ void SerialESCape32::eraseSignature() {
         DBGLN("SerialESCape32::eraseSig NO FIRMWARE");       
     }    
 }
-
 void SerialESCape32::sendFirmware(){
     if (firmwareBuffer && !firmwareBuffer->isBootloader) {
         mBuffer->clear();
@@ -485,7 +490,6 @@ void SerialESCape32::sendFirmware(){
         DBGLN("SerialESCape32::sendFW NO FIRMWARE");       
     }
 }
-
 void SerialESCape32::asciiInfo() {
     DBGLN("SerialESCape32::asciiInfo");   
     mParser.set(Parser::State::Ascii);
@@ -534,7 +538,7 @@ SerialESCape32::Parser::operator bool() const {
     return !(mState == State::Error);
 }
 void SerialESCape32::Parser::process(const uint8_t b){
-    DBGLN("proc %u %u", b, mIndex);
+    // DBGLN("proc %u %u", b, mIndex);
     if (mIndex < mData.size()) {
         mData[mIndex++] = b;
     }
@@ -583,7 +587,6 @@ void SerialESCape32::Parser::process(const uint8_t b){
         break;
     }
 }
-
 void SerialESCape32::Parser::parseAsciiModes() {
     char modeString[16];
     uint32_t mode = -1;
@@ -673,10 +676,10 @@ void SerialESCape32::Parser::probe() {
     if (valueAt(0) == 0x00) {
         mState = State::Ok;
         escape32_status.actual = "Connected";
-        DBGLN("probe ok");
+        // DBGLN("probe ok");
     }
     else {
-        DBGLN("probe error");
+        // DBGLN("probe error");
         mState = State::Error;
     }
 }
@@ -706,14 +709,13 @@ bool SerialESCape32::Parser::checkData(const uint16_t payloadLength) {
     }
     return true;
 }
-
 void SerialESCape32::Parser::info() {
-    DBGLN("Info");
+    // DBGLN("Info");
     if (checkData(32)) {
         mBLInfo.mRevision = mData[2];
         mBLInfo.mPin = mData[3];
         mBLInfo.mMcu = mData[4] | (mData[5] << 8) | (mData[6] << 16) | (mData[7] << 24);
-        DBGLN("BL Rev: %u, IO: %u, MCU: %u", mBLInfo.mRevision, mBLInfo.mPin, mBLInfo.mMcu);
+        // DBGLN("BL Rev: %u, IO: %u, MCU: %u", mBLInfo.mRevision, mBLInfo.mPin, mBLInfo.mMcu);
         escape32_status.bootloader = String{"R"} + mBLInfo.mRevision;
         mState = State::Ok;
         escape32_status.actual = "Read OK";
@@ -723,13 +725,13 @@ void SerialESCape32::Parser::info() {
     mState = State::Error;
 }
 void SerialESCape32::Parser::read() {
-    DBGLN("Read");
+    // DBGLN("Read");
     if (checkData(20)) {
         if ((mData[2] == 0xea) && (mData[3] == 0x32)) {
             mFWInfo.mRevision = mData[4];
             mFWInfo.mPatch = mData[5];
             memcpy(&mFWInfo.mTarget[0], &mData[6], mFWInfo.mTarget.size() - 1);
-            DBGLN("Read: %u %s", mFWInfo.mRevision, &mFWInfo.mTarget[0]);
+            // DBGLN("Read: %u %s", mFWInfo.mRevision, &mFWInfo.mTarget[0]);
             escape32_status.firmware = String{"R"} + mFWInfo.mRevision + '.' + mFWInfo.mPatch;
             escape32_status.target = String{&mFWInfo.mTarget[0]};
             mState = State::Ok;
@@ -743,7 +745,15 @@ void SerialESCape32::Parser::read() {
     escape32_status.actual = "Read failed";
     mState = State::Error;
 }
-
+bool SerialESCape32::checkTarget() {
+    if (firmwareBuffer) {
+        DBGLN("check: fw: %s, file: ", &mParser.fwinfo().mTarget[0], (const char*)&firmwareBuffer->data[4]);
+        if (strncmp(&mParser.fwinfo().mTarget[0], (const char*)&firmwareBuffer->data[4], mParser.fwinfo().mTarget.size() - 1) == 0) {
+            return true;
+        }
+    }   
+    return false;
+}
 void SerialESCape32::processBytes(uint8_t* const bytes, const uint16_t size) {
     for(uint16_t i = 0; i < size; ++i) {
         if (mSkipFirstReceivedByte) {
