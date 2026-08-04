@@ -175,6 +175,9 @@ class SerialESCape32 : public SerialIO {
         void process(const uint8_t b);
         void set(const State s);
         explicit operator bool() const;
+        const FirmwareInfo& fwinfo() const {
+            return mFWInfo;
+        }
         ESCape32Status& escape32_status;
     private:
         void probe();
@@ -223,6 +226,8 @@ private:
     
     void eraseSignature();
     void sendFirmware();
+    
+    bool checkTarget();
     
     State mState = State::Start;
     uint16_t mStateCounter = 0;
