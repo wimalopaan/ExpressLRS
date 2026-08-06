@@ -13,7 +13,7 @@
 # Leave commented to use traditional binding
 #-DMY_BINDING_PHRASE="default ExpressLRS binding phrase"
 
-# WM Options
+# WM Options (activate at own risk)
 
 # activate Extensions (MultiSwitch, SumDV3, LedRGB)
 #-DWMEXTENSION
@@ -29,6 +29,14 @@
 
 # do not output 0x26 packets / ch17-32
 #-DWMCRSF_NO_HIGH_CHANNELS
+
+# activate ESCape32 extension (flashing of ESCape32 ESCs via WiFi)
+#-DWMESCAPE32
+# use both Serial1/Serial2 simultaneously (experimental!!! Only useful iff ESCs are of very same type)
+#-DWMESCAPE32_USE_SIMULTANEOUSLY
+
+# activate 3rd serial (Serial2) (only for ESP32)
+#-DWMSERIAL2
 
 # low-pass filter of channel values
 #-DWMFILTER32
