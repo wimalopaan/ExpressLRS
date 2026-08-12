@@ -19,7 +19,9 @@ struct MultiSwitch {
     bool hasData() const;
     uint8_t channelFlags() const;
 
-    private:    
+    void registerCallback(void (*cb)(const MultiSwitch*));
+    private:  
+    void (*mCb)(const MultiSwitch*) = nullptr;
     bool mHasData = false;
     const uint8_t minAddress = 240;
     const uint8_t maxAddress = minAddress + 8 - 1;
