@@ -45,12 +45,20 @@ uint32_t MultiSwitch::ledColor(const uint8_t led) const {
     }
     return 0;
 }
+void MultiSwitch::registerCallback(void (*cb)(const MultiSwitch*)) {
+    DBGLN("MSW reg cb");
+    mCb = cb;
+}
 void MultiSwitch::decode(const uint8_t* const data) {
     DBGLN("MSW decode");
     const uint8_t realm = data[0]; // 5
     const uint8_t cmd = data[1]; // 6
     if (realm == CRSF_COMMAND_SWITCH) { 
         DBGLN("MSW Realm SW: cmd: %d", cmd);
+        if (mCb) {
+            DBGLN("MSW Realm SW: CB");
+            mCb(this);
+        }
         if (cmd == CRSF_SUBCMD_SWITCH_SET) { 
             const uint8_t swAddress = data[2];
             const uint16_t sw = data[3];
@@ -67,6 +75,9 @@ void MultiSwitch::decode(const uint8_t* const data) {
                         mSwitches[group] &= ~mask;
                     }
                 }
+                if (mCb) {
+                    mCb(this);
+                }
             }
             else if ((swAddress >= minLedAddress) && (swAddress <= maxLedAddress)) {
                 mHasData = true;
@@ -80,6 +91,9 @@ void MultiSwitch::decode(const uint8_t* const data) {
                     else {
                         mLeds[group] &= ~mask;
                     }
+                }
+                if (mCb) {
+                    mCb(this);
                 }
             }
         }
@@ -102,6 +116,9 @@ void MultiSwitch::decode(const uint8_t* const data) {
                         mSwitches[group] &= ~mask;
                     }
                 }
+                if (mCb) {
+                    mCb(this);
+                }
             }
             else if ((swAddress >= minLedAddress) && (swAddress <= maxLedAddress)) {
                 mHasData = true;
@@ -118,10 +135,14 @@ void MultiSwitch::decode(const uint8_t* const data) {
                         mLeds[group] &= ~mask;
                     }
                 }
+                if (mCb) {
+                    mCb(this);
+                }                
             }
         }
         else if (cmd == CRSF_SUBCMD_SWITCH_SET4M) { 
             const uint8_t count = data[2];
+            bool gotData = false;
             for(uint8_t i = 0; i < count; ++i) {
                 const uint8_t swAddress = data[3 + 3 * i];
                 const uint16_t sw = (data[4 + 3 * i] << 8) + data[5 + 3 * i];
@@ -139,6 +160,7 @@ void MultiSwitch::decode(const uint8_t* const data) {
                             mSwitches[swGroup] &= ~mask;
                         }
                     }
+                    gotData = true;
                 }
                 else if ((swAddress >= minLedAddress) && (swAddress <= maxLedAddress)) {
                     mHasData = true;
@@ -153,8 +175,13 @@ void MultiSwitch::decode(const uint8_t* const data) {
                             mLeds[swGroup] &= ~mask;
                         }
                     }
+                    gotData = true;
                 }
             }
+            
+            if (mCb && gotData) {
+                mCb(this);
+            }                                
         }
         else if (cmd == CRSF_SUBCMD_SWITCH_SET64) { // set64
             const uint8_t swAddress = data[2];
@@ -173,6 +200,9 @@ void MultiSwitch::decode(const uint8_t* const data) {
                         mSwitches[swGroup] &= ~mask;
                     }
                 }
+                if (mCb) {
+                    mCb(this);
+                }                
             }
         }
         else if (cmd == CRSF_SUBCMD_SWITCH_SETRGB) { // setRGB
@@ -190,6 +220,9 @@ void MultiSwitch::decode(const uint8_t* const data) {
                     DBGLN("MSW SetRGB: out: %d, r: %d, g: %d, b: %d", out, r, g, b);
                     mLedColors[swGroup * 8 + out] = color;
                 }
+                if (mCb) {
+                    mCb(this);
+                }                
             }
         }
     }

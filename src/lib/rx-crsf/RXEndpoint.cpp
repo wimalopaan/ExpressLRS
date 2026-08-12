@@ -96,4 +96,8 @@ void RXEndpoint::handleMessage(const crsf_header_t *message)
 const MultiSwitch& RXEndpoint::multiSwitch() const {
     return msw;
 }
+void RXEndpoint::registerCallback(void (*cb)(const MultiSwitch*)){
+    DBGLN("RX reg cb");
+    msw.registerCallback(cb);
+}
 #endif

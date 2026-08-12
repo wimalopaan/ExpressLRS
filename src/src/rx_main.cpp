@@ -45,6 +45,9 @@ namespace std {
 std::array<ESCape32Status, 2> escape32_status{};
 std::array<SerialEvent, 2>    serial_events{SerialEvent::None, SerialEvent::None};
 #endif
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+#include "rx_espnow.h"
+#endif
 
 #include "devAnalogVbat.h"
 #include "devBaro.h"
@@ -130,6 +133,9 @@ RxConfig config;
 CRSFRouter crsfRouter;
 RXEndpoint crsfReceiver;
 RXOTAConnector otaConnector;
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+EspNowMaster espNow;
+#endif
 
 bool crsfBatterySensorDetected = false;
 bool crsfBaroSensorDetected = false;
@@ -2219,6 +2225,9 @@ void setup()
         setupSerial1();
 #if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
         setupSerial2();
+#endif        
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+        // espNow.start();
 #endif        
 
         devicesRegister(ui_devices, ARRAY_SIZE(ui_devices));

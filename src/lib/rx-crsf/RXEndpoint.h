@@ -17,6 +17,7 @@ public:
 
 #if defined(WMEXTENSION) && defined(TARGET_RX)
     const MultiSwitch& multiSwitch() const;
+    void registerCallback(void (*cb)(const MultiSwitch*));
 #endif
 private:
     void luaparamMappingChannelOut(propertiesCommon *item, uint8_t arg);
