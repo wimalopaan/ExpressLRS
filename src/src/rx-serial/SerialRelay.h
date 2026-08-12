@@ -1,0 +1,36 @@
+#pragma once
+#include "SerialIO.h"
+
+#include "CRSFParser.h"
+#include "CRSFRouter.h"
+
+class SerialRelay final : public SerialIO, public CRSFConnector {
+public:
+    explicit SerialRelay(Stream &out, Stream &in)
+        : SerialIO(&out, &in)
+    {
+        crsfRouter.addConnector(this);
+    }
+    ~SerialRelay() override
+    {
+        crsfRouter.removeConnector(this);
+    }
+
+    uint32_t sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t *channelData) override;
+    void forwardMessage(const crsf_header_t *message) override;
+
+    bool sendImmediateRC() override { return true; }
+
+private:
+    CRSFParser crsfParser;
+
+    void processBytes(uint8_t *bytes, uint16_t size) override;
+
+#if defined(WMEXTENSION) && defined(WMCRSF_CHAN_EXT)
+#if !defined(WMCRSF_CH_OUT_CONCAT)
+    bool sendHighChannels = false;
+#else
+    void sendRCFrame_part(uint32_t *channelData, const bool isHigh);
+#endif
+#endif
+};
