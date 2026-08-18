@@ -45,6 +45,10 @@
 #if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
 #include "../../src/rx-serial/SerialESCape32.h"
 #endif
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
+#include "../../src/rx_espnow.h"
+extern EspNowMaster espNow;
+#endif
 #include "WebContent.h"
 
 #include "config.h"
@@ -108,13 +112,16 @@ static const char VERSION[] = {LATEST_VERSION, 0};
 void setWifiUpdateMode()
 {
     DBGLN("setWifiUpdateMode");
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
+  espNow.stop();
+#endif
   // No need to ExitBindingMode(), the radio will be stopped stopped when start the Wifi service.
   // Need to change this before the mode change event so the LED is updated
   InBindingMode = false;
   setConnectionState(wifiUpdate);
 
 #if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
-      reconfigureSerials = true;
+  reconfigureSerials = true;
 #endif
 }
 

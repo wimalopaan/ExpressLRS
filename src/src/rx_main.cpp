@@ -45,7 +45,7 @@ namespace std {
 std::array<ESCape32Status, 2> escape32_status{};
 std::array<SerialEvent, 2>    serial_events{SerialEvent::None, SerialEvent::None};
 #endif
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
 #include "rx_espnow.h"
 #endif
 
@@ -105,12 +105,15 @@ device_affinity_t ui_devices[] = {
   {&SerialUpdate_device, 1},
 #endif
 #if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
-    {&Serial2_device, 1},
+  {&Serial2_device, 1},
 #endif    
   {&LED_device, 0},
   {&RXLUA_device, 0},
   {&RGB_device, 0},
   {&WIFI_device, 0},
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
+  {&ESPNOWSender_device, 0},
+#endif
   {&Button_device, 0},
   {&AnalogVbat_device, 0},
   {&ServoOut_device, 1},
@@ -133,7 +136,7 @@ RxConfig config;
 CRSFRouter crsfRouter;
 RXEndpoint crsfReceiver;
 RXOTAConnector otaConnector;
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
 EspNowMaster espNow;
 #endif
 
@@ -246,10 +249,17 @@ bool BindingModeRequest = false;
 extern void setWifiUpdateMode();
 void reconfigureSerial();
 
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX) && defined(WMESPNOW_RECV)
+uint8_t getLq()
+{
+    return 100;
+}
+#else
 uint8_t getLq()
 {
     return LQCalc.getLQ();
 }
+#endif
 
 bool getGpsTelemetry(gps_telemetry_t &out)
 {
@@ -2220,14 +2230,18 @@ void setup()
             }
         }
         crsfRouter.addEndpoint(&crsfReceiver);
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
+#if !defined(WMESPNOW_RECV)
         crsfRouter.addConnector(&otaConnector);
+#endif
+#endif
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
+        crsfRouter.addConnector(&espNow);
+#endif        
         setupSerial();
         setupSerial1();
 #if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
         setupSerial2();
-#endif        
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
-        // espNow.start();
 #endif        
 
         devicesRegister(ui_devices, ARRAY_SIZE(ui_devices));
@@ -2239,6 +2253,10 @@ void setup()
 
         setupRadio();
 
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
+        espNow.start();
+#endif        
+        
         if (connectionState != radioFailed)
         {
             // RFnoiseFloor = MeasureNoiseFloor(); //TODO move MeasureNoiseFloor to driver libs
@@ -2320,6 +2338,11 @@ void loop()
     {
         return;
     }
+    
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX) && defined(WMESPNOW_RECV)
+    return;
+#endif
+    
 
     if ((connectionState != disconnected) && (ExpressLRS_currAirRate_Modparams->index != ExpressLRS_nextAirRateIndex)) // forced change
     {
