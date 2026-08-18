@@ -75,7 +75,7 @@ void ICACHE_RAM_ATTR hwTimer::updateInterval(uint32_t time)
     HWtimerInterval = time * HWTIMER_TICKS_PER_US;
     if (timer)
     {
-        DBGLN("hwTimer interval: %d", time);
+        // DBGLN("hwTimer interval: %d", time);
         timerAlarmWrite(timer, HWtimerInterval, true);
     }
 }

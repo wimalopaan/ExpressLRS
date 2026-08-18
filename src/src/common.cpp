@@ -1,6 +1,21 @@
 #include "common.h"
 #include "OTA.h"
 
+#if defined(WMESPNOW_RECV) 
+# include "rx_dummyradio.h"
+
+DummyRadio Radio;
+
+expresslrs_mod_settings_s ExpressLRS_AirRateConfig[RATE_MAX] = {
+    {0, RadioBandMod::Combined::LORA_900, RATE_LORA_900_200HZ, 0, 0, 0,  8, TLM_RATIO_1_64, 4,  5000, 0, 1},
+};
+
+expresslrs_rf_pref_params_s ExpressLRS_AirRateRFperf[RATE_MAX] = {
+    {0, -112,  4380, 3000, 2500, 600, 5000, SNR_SCALE( 1), SNR_SCALE(3.0)},
+};
+
+#else
+
 #if defined(RADIO_SX127X)
 
 #include "SX127xDriver.h"
@@ -159,6 +174,7 @@ expresslrs_rf_pref_params_s ExpressLRS_AirRateRFperf[RATE_MAX] = {
     {21, -115, 10798, 4000, 2500,   0,  5000, SNR_SCALE(-1), SNR_SCALE(6.5)},
     {22, -112,  5871, 3500, 2500,  10,  5000, SNR_SCALE( 0), SNR_SCALE(8.5)},
     {23, -112,  7456, 3500, 2500,  11,  5000, SNR_SCALE( 0), SNR_SCALE(8.5)}};
+#endif
 #endif
 
 expresslrs_mod_settings_s *get_elrs_airRateConfig(uint8_t index)
