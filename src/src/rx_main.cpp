@@ -2230,14 +2230,16 @@ void setup()
             }
         }
         crsfRouter.addEndpoint(&crsfReceiver);
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
-#if !defined(WMESPNOW_RECV)
+
+#if defined(WMEXTENSION) && defined(TARGET_RX) && defined(WMESPNOW)
+# if !defined(WMESPNOW_RECV)
+        crsfRouter.addConnector(&otaConnector);
+# endif
+        crsfRouter.addConnector(&espNow);
+#else 
         crsfRouter.addConnector(&otaConnector);
 #endif
-#endif
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
-        crsfRouter.addConnector(&espNow);
-#endif        
+        
         setupSerial();
         setupSerial1();
 #if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
