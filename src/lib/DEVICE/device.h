@@ -32,6 +32,7 @@ enum deviceEvent_t {
 
 #if defined(WMEXTENSION)
     EVENT_RUNTIME_RECONFIGURE_SERIAL = 1 << 20,
+    EVENT_CONFIG_CALIBRATION_CHANGED = 1 << 21,
 #endif
     
     EVENT_ALL = 0xFFFFFFFF

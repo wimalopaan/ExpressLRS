@@ -19,6 +19,10 @@ bool DummyRadio::Begin(uint32_t /*minimumFrequency*/, uint32_t /*maximumFrequenc
     DBGLN("DummyRadio: Begin called (RF disabled)");
     return true;
 }
+bool DummyRadio::Begin(){
+    DBGLN("DummyRadio: Begin called (RF disabled)");
+    return true;
+}
 
 void DummyRadio::End(){
 }

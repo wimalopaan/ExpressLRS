@@ -38,7 +38,7 @@ static int start()
         return DURATION_NEVER;
 #endif
     handset->Begin();
-#if defined(DEBUG_TX_FREERUN)
+#if defined(DEBUG_TX_FREERUN) || (defined(WMEXTENSION) && defined(WMRXTX_ANALOG))
     handset->forceConnection();
 #endif
     return DURATION_IMMEDIATELY;

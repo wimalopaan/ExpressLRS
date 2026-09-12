@@ -37,28 +37,64 @@ extern EspNowMaster espNow;
 extern bool webserverPreventAutoStart;
 
 extern void servoNewChannelsAvailable();
+extern void crsfRCFrameAvailable();
 
 static std::array<uint8_t, 6> broadcastAddress = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
+// 10:00:3B:C4:4C:30
+
 #if defined(WMESPNOW_RECV)
-#if defined(PLATFORM_ESP32)
+// slave
+# if defined(PLATFORM_ESP32)
+#  if defined(CONFIG_IDF_TARGET_ESP32C3)
+static std::array<uint8_t, 6> peerAddress = {0xA4, 0xF0, 0x0F, 0x23, 0xF4, 0x50};
+static std::array<uint8_t, 6> ownAddress  = {0x10, 0x00, 0x3B, 0xC5, 0xF2, 0x70}; 
+#  else
 static std::array<uint8_t, 6> peerAddress = {0xA4, 0xF0, 0x0F, 0x23, 0xF4, 0x50};
 static std::array<uint8_t, 6> ownAddress  = {0x4C, 0x75, 0x25, 0xA9, 0x0B, 0x94};
-#endif
-#if defined(PLATFORM_ESP8266)
+#  endif
+# endif
+# if defined(PLATFORM_ESP8266)
 static std::array<uint8_t, 6> peerAddress = {0xA4, 0xF0, 0x0F, 0x23, 0xF4, 0x50};
 static std::array<uint8_t, 6> ownAddress  = {0x24, 0xA1, 0x60, 0x1F, 0x19, 0x2E};
-#endif
+# endif
 #else
+// master
 // static std::array<uint8_t, 6> peerAddress  = {0x4C, 0x75, 0x25, 0xA9, 0x0B, 0x94};
-static std::array<uint8_t, 6> peerAddress = {0x24, 0xA1, 0x60, 0x1F, 0x19, 0x2E}; // esp8266
+// static std::array<uint8_t, 6> peerAddress = {0x24, 0xA1, 0x60, 0x1F, 0x19, 0x2E}; // esp8266
+// static std::array<uint8_t, 6> peerAddress  = {0x10, 0x00, 0x3B, 0xC4, 0x4C, 0x30}; // weact
+static std::array<uint8_t, 6> peerAddress  = {0x10, 0x00, 0x3B, 0xC5, 0xF2, 0x70}; // weact2
 static std::array<uint8_t, 6> ownAddress   = {0xA4, 0xF0, 0x0F, 0x23, 0xF4, 0x50};
 #endif
+
+struct FwdBuffer {
+    void clear() {
+        std::memcpy(&mBuffer[0], config.GetUID(), 6);
+        mSize = 6;
+    }
+    bool insert(const uint8_t* const data, const uint8_t len) {
+        if ((mBuffer.size() - mSize) >= (len + 1)) {
+            mBuffer[mSize++] = len;
+            for(uint8_t i = 0; i < len; ++i) {
+                mBuffer[mSize + i] = data[i];  
+            }
+            mSize += len;
+            return true;
+        }
+        return false;
+    }
+private:
+    std::array<uint8_t, 250> mBuffer;
+    uint8_t mSize = 0;
+};
 
 namespace {
     std::array<volatile uint8_t, 64 + 6 - 3 + 1> recv_buffer;
     volatile bool recv_buffer_ready = false;
     volatile uint32_t recv_millis = 0;
+    
+    FwdBuffer fwdBuffer;
+    
     void onDataRecvGeneric(const uint8_t* mac_addr, const uint8_t* data, const uint8_t len){
         if (recv_buffer_ready) {
             return;
@@ -91,7 +127,14 @@ void EspNowMaster::forwardMessage(const crsf_header_t* const message) {
         return;
     }
     const uint8_t* const data = (uint8_t *)message;
-    const uint8_t length = data[CRSF_TELEMETRY_LENGTH_INDEX] + CRSF_FRAME_NOT_COUNTED_BYTES - 3; // no start, length, crc
+    
+    // [6 bytes uid] [length] {[type] [payload]}, ...
+    // length :=  crsf-frameLength - 1 = payload-size + 1
+    // crsf-totalLength = crsf-frameLength + 2 = length + 3
+    
+    const uint8_t length = data[CRSF_TELEMETRY_LENGTH_INDEX] - 1; // no start, crc
+    // const uint8_t length = data[CRSF_TELEMETRY_LENGTH_INDEX] + CRSF_FRAME_NOT_COUNTED_BYTES - 3; // no start, length, crc
+
     if (length <= (64 - 3)) {        
         if (message->type == CRSF_FRAMETYPE_LINK_STATISTICS) {
             return;
@@ -105,6 +148,15 @@ void EspNowMaster::forwardMessage(const crsf_header_t* const message) {
             }
         }
         DBGLN("E fwd dst: %u src: %u, type: %u", message->payload[0], message->payload[1], message->type);                    
+        
+        if (fwdBuffer.insert(&data[2], length)) { 
+            // added to buffer
+        }
+        else {
+            // 1. flush buffer
+            // 2. add to buffer
+        }
+        
         std::memcpy(&outBuffer[0], config.GetUID(), 6);
         std::memcpy(&outBuffer[6], &data[2], length);
         const auto result = esp_now_send(&peerAddress[0], (uint8_t*)&outBuffer[0], length + 6);
@@ -128,7 +180,8 @@ void EspNowMaster::processBytes(const uint8_t* const data, const int len) {
     if (len < 6) {
         return;
     }
-    if (len > (64 - 3 + 6)) {
+    if (len > (64 - 2 + 6)) {
+    // if (len > (64 - 3 + 6)) {
         return;
     }
     // DBGLN("EspNow process bytes");        
@@ -136,12 +189,19 @@ void EspNowMaster::processBytes(const uint8_t* const data, const int len) {
     if (std::memcmp(data, config.GetUID(), 6) == 0) {        
         mConnectCounter = 2000 / ESPNOW_TIMEOUT_MS; // 2000ms timeout
 
+        // frame inkl. length
+        // len = 6 (uid) + total - 2 = total + 4
+        // total = len + 2 - 6 = len - 4
+        // crsfLen = total - 2 = len - 6 = length including crc
+
         // len = 6 (uid) + total - 3 = total + 3
         // total = len + 3 - 6 = len - 3
         // crsfLen = total - 2 = len - 5 = length including crc
         
-        const uint8_t crsfLen = len - 5;
+        const uint8_t crsfLen = len - 6;
+        // const uint8_t crsfLen = len - 5;
         std::memcpy(&inBuffer[2], &data[6], len - 6);
+        // std::memcpy(&inBuffer[2], &data[6], len - 6);
         inBuffer[0] = 0xc8;
         inBuffer[1] = crsfLen;
         const uint8_t crc = crsfRouter.crsf_crc.calc(&inBuffer[2], crsfLen - 1);
@@ -168,6 +228,7 @@ void EspNowMaster::processBytes(const uint8_t* const data, const int len) {
             if (mChRecvCount > 10) {
                 rcPacketToChannelsData(header);
                 servoNewChannelsAvailable();
+                crsfRCFrameAvailable();
             }
             else {
                 ++mChRecvCount;
@@ -200,7 +261,7 @@ void EspNowMaster::forwardMessage(const crsf_header_t* const message) {
             // send no telemetry except channels
             if (!((message->type == CRSF_FRAMETYPE_RC_CHANNELS_PACKED) || 
                   (message->type == CRSF_FRAMETYPE_RC_CHANNELS_EXTENDED))) {
-                DBGLN("E fwd telem disc");
+                // DBGLN("E fwd telem disc");
                 return; 
             }
         }
@@ -251,7 +312,9 @@ void EspNowMaster::processBytes(const uint8_t* const data, const int len) {
             DBGLN("E proc ES disc");
             return;
         }
-        DBGLN("E proc dst: %u src: %u, type: %u, size: %u, s: %u, count: %u, m: %u, rm: %u", header->payload[0], header->payload[1], header->type, header->frame_size, crsfLen-1, mChRecvCount, millis(), recv_millis);
+        if (header->type >= CRSF_FRAMETYPE_DEVICE_PING) {
+            DBGLN("E proc dst: %u src: %u, type: %u, size: %u, s: %u, count: %u, m: %u, rm: %u", header->payload[0], header->payload[1], header->type, header->frame_size, crsfLen-1, mChRecvCount, millis(), recv_millis);
+        }
         crsfRouter.processMessage(this, header);
     }
 }
@@ -341,7 +404,7 @@ void EspNowMaster::start() {
     WiFi.mode(WIFI_STA);
     
     const String a = WiFi.macAddress();
-    DBG("Mac: %s", a.c_str());
+    DBGLN("Mac: %s", a.c_str());
     
 #if defined(PLATFORM_ESP32)
     esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE); //*

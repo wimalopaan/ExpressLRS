@@ -1603,7 +1603,7 @@ void setupSerial1() {};
 void reconfigureSerial1() {};
 #endif
 
-#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3) && defined(TARGET_RX)
 static void serial2Shutdown()
 {
     if(serial2IO != nullptr)
@@ -2251,7 +2251,7 @@ void setup()
         
         setupSerial();
         setupSerial1();
-#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3) && defined(TARGET_RX)
         setupSerial2();
 #endif        
 
@@ -2287,6 +2287,10 @@ void setup()
     // setup() eats up some of this time, which can cause the first mode connection to fail.
     // Resetting the time here give the first mode a better chance of connection.
     RFmodeLastCycled = millis();
+
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(WMESPNOW_RECV) && defined(TARGET_RX)
+    hwTimer::resume();
+#endif        
 }
 
 #if defined(PLATFORM_ESP32_C3)

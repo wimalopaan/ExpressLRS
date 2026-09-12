@@ -101,29 +101,13 @@ void TXModuleEndpoint::handleMessage(const crsf_header_t *message)
     }
 }
 
-#if defined(WMEXTENSION) && defined(WMCRSF_CHAN_EXT)
-// static void RcPacketToChannelsData_Test(const crsf_header_t *message, const uint8_t offset) // data is packed as 11 bits per channel
-// {
-//     const auto payload = (uint8_t *)message + sizeof(crsf_header_t);
-//     constexpr unsigned srcBits = 11;
-//     constexpr unsigned dstBits = 11;
-//     constexpr unsigned inputChannelMask = (1 << srcBits) - 1;
-//     constexpr unsigned precisionShift = dstBits - srcBits;
-
-//     uint32_t localChannelData[CRSF_NUM_CHANNELS];
-
-//     for (uint32_t & n : localChannelData)
-//     {
-//         n = 992;
-//     }
-
-//     handset->PerformChannelOverrides(localChannelData, CRSF_NUM_CHANNELS, offset);
-
-//     handset->RCDataReceived(localChannelData, CRSF_NUM_CHANNELS, offset);
-// }
-
-void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message, const uint8_t offset) // data is packed as 11 bits per channel
+#if defined(WMEXTENSION) 
+// && defined(WMCRSF_CHAN_EXT)
+void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message, const uint8_t offset = 0) // data is packed as 11 bits per channel
 {
+#if defined(WMRXTX_ANALOG)
+    return; // no data from handset (or elrs-buddy)
+#else
     const auto payload = (uint8_t *)message + sizeof(crsf_header_t);
     constexpr unsigned srcBits = 11;
     constexpr unsigned dstBits = 11;
@@ -191,6 +175,7 @@ void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message, cons
     }
 
     handset->RCDataReceived(localChannelData, CRSF_NUM_CHANNELS, offset);
+#endif
 }
 #else
 void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message) // data is packed as 11 bits per channel
