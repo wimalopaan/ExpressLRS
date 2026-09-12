@@ -521,7 +521,11 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
   // *Do* send data if a packet has never been received from handset and the timer is running
   // this is the case when bench testing and TXing without a handset
   bool dontSendChannelData = false;
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+  uint32_t lastRcData = micros();
+#else
   uint32_t lastRcData = handset->GetRCdataLastRecv();
+#endif
   if (lastRcData && (micros() - lastRcData > 1000000))
   {
     // The tx is in Mavlink mode and without a valid crsf or RC input.  Do not send stale or fake zero packet RC!
@@ -1476,6 +1480,8 @@ void setup()
   }
 }
 
+extern volatile bool calibrationDirty;
+extern void serializeCalibration();
 void loop()
 {
   uint32_t now = millis();

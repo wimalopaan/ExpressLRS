@@ -132,7 +132,7 @@ public:
      */
     uint32_t GetRCdataLastRecv() const { return RCdataLastRecv; }
 
-#if defined(DEBUG_TX_FREERUN)
+#if defined(DEBUG_TX_FREERUN) || (defined(WMEXTENSION) && defined(WMRXTX_ANALOG))
     /**
      * @brief Can be used to force a connected callback for debugging
      */

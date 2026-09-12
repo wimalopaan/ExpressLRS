@@ -561,8 +561,10 @@ bool CRSFHandset::UARTwdt()
             if (controllerConnected)
             {
                 DBGLN("CRSF UART Disconnected");
-                if (disconnected) disconnected();
-                controllerConnected = false;
+#if (!(defined(WMEXTENSION) && defined(WMRXTX_ANALOG)))
+                        if (disconnected) disconnected();
+                        controllerConnected = false;
+#endif
             }
 
             UARTrequestedBaud = autobaud();

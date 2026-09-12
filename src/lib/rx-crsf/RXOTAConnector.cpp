@@ -87,7 +87,7 @@ bool RXOTAConnector::GetNextPayload(uint8_t *nextPayloadSize, uint8_t *payloadDa
             // If the message at this point in the queue is not deleted, and it's a SETTINGS_ENTRY then we're going to return it
             if (isPrioritised((crsf_frame_type_e)messagePayloads[i + 1 + CRSF_TELEMETRY_TYPE_INDEX]))
             {
-                DBGLN("RXOTA getnext 1: pc %u mq: %u", prioritizedCount, messagePayloads.size());
+                // DBGLN("RXOTA getnext 1: pc %u mq: %u", prioritizedCount, messagePayloads.size());
                 if (!IS_DEL(size))
                 {
                     prioritizedCount--;
@@ -127,7 +127,7 @@ bool RXOTAConnector::GetNextPayload(uint8_t *nextPayloadSize, uint8_t *payloadDa
             messagePayloads.skip(SIZE(size));
             continue;
         }
-        DBGLN("RXOTA getnext 2: pc %u mq: %u", prioritizedCount, messagePayloads.size());
+        // DBGLN("RXOTA getnext 2: pc %u mq: %u", prioritizedCount, messagePayloads.size());
         messagePayloads.popBytes(payloadData, size);
         *nextPayloadSize = CRSF_FRAME_SIZE(payloadData[CRSF_TELEMETRY_LENGTH_INDEX]);
         return true;
@@ -158,7 +158,7 @@ void RXOTAConnector::forwardMessage(const crsf_header_t *message)
             // If the message at this point in the queue is not deleted, and it matches this comparator, then we check it
             if (!IS_DEL(size) && messagePayloads[i + 1 + CRSF_TELEMETRY_TYPE_INDEX] == message->type)
             {
-                DBGLN("RXOTA fwd 1");
+                // DBGLN("RXOTA fwd 1");
                 const auto whatToDo = comparator == comparators.end() ? ACTION_OVERWRITE : comparator->second(message, messagePayloads, i + 1);
                 if (whatToDo != ACTION_NEXT)
                 {
@@ -172,7 +172,7 @@ void RXOTAConnector::forwardMessage(const crsf_header_t *message)
     }
     if (isPrioritised(message->type))
     {
-        DBGLN("RXOTA fwd 2");
+        // DBGLN("RXOTA fwd 2");
         prioritizedCount++;
     }
 

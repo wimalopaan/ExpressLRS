@@ -9,6 +9,7 @@ public:
     DummyRadio();
 
     bool Begin(uint32_t minimumFrequency, uint32_t maximumFrequency);
+    bool Begin();
     void End();
 
     // SX127x-style overloads

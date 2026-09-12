@@ -62,6 +62,12 @@
 #define GPIO_PIN_BUTTON2 hardware_pin(HARDWARE_button2)
 #define USER_BUTTON2_LED hardware_pin(HARDWARE_button2_led_index)
 
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+#define GPIO_PIN_ADC_INPUTS hardware_i16_array(HARDWARE_adc_inputs)
+#define GPIO_PIN_ADC_INPUTS_COUNT hardware_int(HARDWARE_adc_inputs_count)
+#define GPIO_PIN_GAUGE_PWM hardware_pin(HARDWARE_gauge_pwm)
+#endif
+
 // Lighting
 #define GPIO_PIN_LED_BLUE hardware_pin(HARDWARE_led_blue)
 #define GPIO_LED_BLUE_INVERTED hardware_flag(HARDWARE_led_blue_invert)

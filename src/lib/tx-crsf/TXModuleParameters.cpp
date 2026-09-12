@@ -12,6 +12,10 @@
 #include "deferred.h"
 #include "msptypes.h"
 
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+#include "devADC.h"
+#endif
+
 #define STR_LUA_ALLAUX         "AUX1;AUX2;AUX3;AUX4;AUX5;AUX6;AUX7;AUX8;AUX9;AUX10"
 
 #define STR_LUA_ALLAUX_UPDOWN  "AUX1" LUASYM_ARROW_UP ";AUX1" LUASYM_ARROW_DN ";AUX2" LUASYM_ARROW_UP ";AUX2" LUASYM_ARROW_DN \
@@ -182,6 +186,14 @@ static commandParameter luaBind = {
     lcsIdle, // step
     STR_EMPTYSPACE
 };
+
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+static commandParameter luaStartCalibration = {
+    {"Start calibration", CRSF_COMMAND},
+    lcsIdle, // step
+    STR_EMPTYSPACE
+};
+#endif
 
 static stringParameter luaELRSversion = {
     {version_domain, CRSF_INFO},
@@ -986,6 +998,35 @@ void TXModuleEndpoint::registerParameters()
     registerParameter(&luaBind, sendCallback);
   }
 
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+  registerParameter(&luaStartCalibration, [&](propertiesCommon* const item, const uint8_t arg) {
+        commandParameter* const cmd = (commandParameter *)item;
+        const commandStep_e step = (commandStep_e)arg;
+        switch(step) {
+        case lcsClick:
+            sendCommandResponse(cmd, lcsAskConfirm, "Start calibration?");
+            break;
+        case lcsConfirmed:
+            sendCommandResponse(cmd, lcsExecuting, "Move sources");
+            startInputCalibration();
+            break;
+        case lcsCancel:
+            sendCommandResponse(cmd, lcsIdle, STR_EMPTYSPACE);
+            break;
+        case lcsQuery:
+            if (isInputCalbrationRunning()) {
+                sendCommandResponse(cmd, lcsExecuting, "Move sources");                
+            }
+            else {
+                sendCommandResponse(cmd, lcsIdle, "Finished calibrating");                                
+            }
+            break;
+        default:
+            break;
+        }
+  });
+#endif
+  
   registerParameter(&luaELRSversion);
 }
 

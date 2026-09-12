@@ -396,6 +396,61 @@ const HARDWARE_SCHEMA = [
         ]
     },
 
+      {
+          title: 'RX-as-TX ADC Configuration', rows: [
+              {
+                  id: 'adc_inputs',
+                  label: 'ADC input pins',
+                  type: 'array',
+                  icon: 'analog',
+                  size: 40,
+                  desc: 'Comma-separated list of ADC input pins (see pwm-outputs) for analog sources'
+              },
+              {
+                  id: 'vbat',
+                  label: 'VBat pin',
+                  type: 'uint',
+                  icon: 'analog',
+                  desc: 'Analog input pin for battery voltage (calibration only)'
+              },
+              {
+                  id: 'vbat_offset',
+                  label: 'VBat offset',
+                  type: 'int',
+                  size: 7,
+                  desc: 'Offset and scale are used together with the analog pin to calculate the voltage'
+              },
+              {
+                  id: 'vbat_scale',
+                  label: 'VBat scale',
+                  type: 'uint',
+                  size: 7,
+                  desc: 'voltage = (analog - offset) / scale'
+              },
+              {
+                  id: 'gauge_pwm',
+                  label: 'Gauge PWM pin for VBat',
+                  type: 'uint',
+                  icon: 'pwm',
+                  desc: 'If a VBat gauge is controlled by PWM'
+              },
+              /* FEATURE: NOT IS_8285 */
+              {
+                  id: 'vbat_atten',
+                  label: 'VBat attenuation',
+                  type: 'select',
+                  options: [
+                      {value: -1, label: 'Default'}, {value: 0, label: '0 dB'}, {value: 1, label: '2.5 dB'},
+                      {value: 2, label: '6 dB'}, {value: 3, label: '11 dB'}, {value: 4, label: '0 dB + calibration'},
+                      {value: 5, label: '2.5 dB + calibration'}, {value: 6, label: '6 dB + calibration'},
+                      {value: 7, label: '11 dB + calibration'}
+                  ],
+                  desc: 'ADC pin attenuation (ESP32) and optional efuse-based calibration adjustment'
+              },
+              /* /FEATURE: NOT IS_8285 */
+          ]
+      },
+    
     {
         title: 'Analog Joystick', rows: [
             {

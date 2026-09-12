@@ -301,7 +301,8 @@ enum eAuxChannels : uint8_t
 };
 
 #if defined(WMEXTENSION)
-#define CRSF_EXTRA_CHANNELS 16
+# define CRSF_EXTRA_CHANNELS 16
+# define MAX_ADC_CHANNELS 16
 #endif
 
 #ifndef UNIT_TEST

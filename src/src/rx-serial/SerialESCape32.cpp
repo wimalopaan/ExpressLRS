@@ -450,7 +450,7 @@ void SerialESCape32::sendBootloader(){
         if (mMultiBlockState.mPosition == 0) {
             (*mBuffer) += CMD_UPDATE;
         }
-        const uint32_t length = std::min((firmwareBuffer->length - mMultiBlockState.mPosition), 1024U);
+        const uint32_t length = std::min((firmwareBuffer->length - mMultiBlockState.mPosition), uint32_t{1024});
         (*mBuffer) += std::span{&firmwareBuffer->data[mMultiBlockState.mPosition], length};
         mParser.set(Parser::State::WriteBootloader);
         send();
@@ -480,7 +480,7 @@ void SerialESCape32::sendFirmware(){
         mBuffer->clear();
         (*mBuffer) += CMD_WRITE;
         (*mBuffer) += mMultiBlockState.mPosition / 1024;
-        const uint32_t length = std::min((firmwareBuffer->length - mMultiBlockState.mPosition), 1024U);
+        const uint32_t length = std::min((firmwareBuffer->length - mMultiBlockState.mPosition), uint32_t{1024});
         DBGLN("SerialESCape32::sendFW: %s, p: %u, fwl: %u, l: %u", &firmwareBuffer->name[0], mMultiBlockState.mPosition, firmwareBuffer->length, length);       
         (*mBuffer) += std::span{&firmwareBuffer->data[mMultiBlockState.mPosition], length};
         mParser.set(Parser::State::EraseWriteFirmware);

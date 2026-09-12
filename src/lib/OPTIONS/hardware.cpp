@@ -121,6 +121,11 @@ static const struct {
     {HARDWARE_misc_fan_speeds_count, "misc_fan_speeds", COUNT},
     {HARDWARE_gsensor_stk8xxx, "gsensor_stk8xxx", BOOL},
     {HARDWARE_thermal_lm75a, "thermal_lm75a", BOOL},
+    #if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+    {HARDWARE_adc_inputs, "adc_inputs", ARRAY},
+    {HARDWARE_adc_inputs_count, "adc_inputs", COUNT},
+    {HARDWARE_gauge_pwm, "gauge_pwm", INT},
+    #endif
     {HARDWARE_pwm_outputs, "pwm_outputs", ARRAY},
     {HARDWARE_pwm_outputs_count, "pwm_outputs", COUNT},
     {HARDWARE_pwm_out_only, "pwm_out_only", BOOL},

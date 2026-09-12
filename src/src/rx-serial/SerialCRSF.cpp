@@ -152,9 +152,11 @@ uint32_t SerialCRSF::sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t
 #else
 uint32_t SerialCRSF::sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t *channelData)
 {
+    #if defined(WMEXTENSION) && defined(WMESPNOW) && defined(WMESPNOW_RECV) && defined(TARGET_RX)
+    #else
     if (!frameAvailable)
         return DURATION_IMMEDIATELY;
-
+    #endif
     crsf_channels_s PackedRCdataOut {};
     PackedRCdataOut.ch0 = channelData[0];
     PackedRCdataOut.ch1 = channelData[1];
