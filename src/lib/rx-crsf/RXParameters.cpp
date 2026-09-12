@@ -633,7 +633,7 @@ void RXEndpoint::registerParameters()
   }
 #endif
 
-#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3) && defined(TARGET_RX)
   registerParameter(&luaSerial2Protocol, [](propertiesCommon* item, uint8_t arg){
     const eSerial2Protocol proto = (eSerial2Protocol)arg;
 # if !defined(WMESCAPE32_USE_SIMULTANEOUSLY)

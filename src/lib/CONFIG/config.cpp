@@ -249,6 +249,21 @@ void TxConfig::Load()
             m_config.backpackTlmMode = value8;
     }
 
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+    tx_config_t::analog_calibration_t values;
+    size_t l = sizeof(m_config.calibration);
+    if (nvs_get_blob(handle, "calibration", &values, &l) == ESP_OK) {
+        DBGLN("calib ok %u", l);
+        for(uint8_t i = 0; i < MAX_ADC_CHANNELS; ++i) {
+            m_config.calibration.channels[i] = values.channels[i];
+        }
+        m_config.calibration.vbat = values.vbat;
+    }
+    else {
+        DBGLN("calib NOK");
+    }
+#endif
+    
     for(unsigned i=0; i<CONFIG_TX_MODEL_CNT; i++)
     {
         char model[10] = "model";
@@ -477,6 +492,18 @@ TxConfig::Commit()
     {
         nvs_set_u32(handle, "tx_version", m_config.version);
     }
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+    if (m_modified & EVENT_CONFIG_CALIBRATION_CHANGED) {
+        const size_t l = sizeof(m_config.calibration);
+        esp_err_t r = nvs_set_blob(handle, "calibration", &m_config.calibration, l);
+        if (r != ESP_OK) {
+            DBGLN("set blob FAILED");
+        }
+        else {
+            DBGLN("set blob OK: %u", l);
+        }
+    }
+#endif
     nvs_commit(handle);
 #else
     // Write the struct to eeprom

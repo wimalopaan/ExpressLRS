@@ -130,6 +130,12 @@ typedef enum {
     HARDWARE_gsensor_stk8xxx,
     HARDWARE_thermal_lm75a,
 
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+    HARDWARE_adc_inputs,
+    HARDWARE_adc_inputs_count,
+    HARDWARE_gauge_pwm,
+#endif
+    
     // PWM
     HARDWARE_pwm_outputs,
     HARDWARE_pwm_outputs_count,

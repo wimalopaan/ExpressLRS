@@ -122,6 +122,18 @@ typedef struct {
     tx_button_color_t buttonColors[2];  // FUTURE: TX RGB color / mode (sets color of TX, can be a static color or standard)
                                         // FUTURE: Model RGB color / mode (sets LED color mode on the model, but can be second TX led color too)
                                         // FUTURE: Custom button actions
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+    struct analog_calibration_t {
+        struct chan_calib {
+            uint16_t min = 0;
+            uint16_t mid = 1024;
+            uint16_t max = 2048;
+        };
+        uint16_t vbat;
+        chan_calib channels[MAX_ADC_CHANNELS];
+    };
+    analog_calibration_t calibration;
+#endif
 } tx_config_t;
 
 class TxConfig : public BindphraseConfigurable
@@ -160,6 +172,20 @@ public:
     uint8_t GetPTRStartChannel() const { return m_model->ptrStartChannel; }
     uint8_t GetPTREnableChannel() const { return m_model->ptrEnableChannel; }
 
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+    const tx_config_t::analog_calibration_t::chan_calib& GetCalibration(const uint8_t ch) const { return m_config.calibration.channels[ch]; }
+    void SetCalibration(const uint8_t ch, const tx_config_t::analog_calibration_t::chan_calib& calib, const bool setModified = true) { 
+        m_config.calibration.channels[ch] = calib; 
+        if (setModified) {
+            m_modified |= EVENT_CONFIG_CALIBRATION_CHANGED;
+        }
+    }
+    void SetVBatCalib(const uint16_t v) {m_config.calibration.vbat = v; m_modified |= EVENT_CONFIG_CALIBRATION_CHANGED;}
+    uint16_t GetVBatCalib() const {return m_config.calibration.vbat;}
+    void event(const uint32_t e) {
+        m_modified |= e;        
+    }
+#endif
     // Setters
     void SetRate(uint8_t rate);
     void SetTlm(uint8_t tlm);
