@@ -14,6 +14,9 @@
 
 #if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
 #include "devADC.h"
+extern void setGaugeMin(uint16_t);
+extern void setGaugeMax(uint16_t);
+extern void setGaugeScale(uint16_t);
 #endif
 
 #define STR_LUA_ALLAUX         "AUX1;AUX2;AUX3;AUX4;AUX5;AUX6;AUX7;AUX8;AUX9;AUX10"
@@ -188,9 +191,27 @@ static commandParameter luaBind = {
 };
 
 #if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+static folderParameter luaAnalogFolder = {
+    {"Analog Inputs / Gauge", CRSF_FOLDER}
+};
 static commandParameter luaStartCalibration = {
     {"Start calibration", CRSF_COMMAND},
     lcsIdle, // step
+    STR_EMPTYSPACE
+};
+static int8Parameter luaGaugeMin = {
+    {"Gauge min", CRSF_UINT8},
+    64, 60, 74,
+    "dV"
+};
+static int8Parameter luaGaugeMax = {
+    {"Gauge max", CRSF_UINT8},
+    75, 75, 84,
+    "dV"
+};
+static int8Parameter luaGaugeScale = {
+    {"Gauge scale", CRSF_UINT8},
+    30, 1, 250,
     STR_EMPTYSPACE
 };
 #endif
@@ -999,6 +1020,7 @@ void TXModuleEndpoint::registerParameters()
   }
 
 #if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+  registerParameter(&luaAnalogFolder);
   registerParameter(&luaStartCalibration, [&](propertiesCommon* const item, const uint8_t arg) {
         commandParameter* const cmd = (commandParameter *)item;
         const commandStep_e step = (commandStep_e)arg;
@@ -1024,7 +1046,19 @@ void TXModuleEndpoint::registerParameters()
         default:
             break;
         }
-  });
+  }, luaAnalogFolder.common.id);
+  registerParameter(&luaGaugeMin, [this](propertiesCommon *item, uint16_t arg) {
+      luaGaugeMin.properties.u.value = arg;
+      setGaugeMin(arg * 100);
+    }, luaAnalogFolder.common.id);
+  registerParameter(&luaGaugeMax, [this](propertiesCommon *item, uint16_t arg) {
+      luaGaugeMax.properties.u.value = arg;
+      setGaugeMax(arg * 100);
+    }, luaAnalogFolder.common.id);
+  registerParameter(&luaGaugeScale, [this](propertiesCommon *item, uint16_t arg) {
+      luaGaugeScale.properties.u.value = arg;
+      setGaugeScale(arg * 4);
+    }, luaAnalogFolder.common.id);
 #endif
   
   registerParameter(&luaELRSversion);
