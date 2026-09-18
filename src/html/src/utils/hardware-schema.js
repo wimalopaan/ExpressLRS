@@ -450,7 +450,6 @@ const HARDWARE_SCHEMA = [
               /* /FEATURE: NOT IS_8285 */
           ]
       },
-    
     {
         title: 'Analog Joystick', rows: [
             {

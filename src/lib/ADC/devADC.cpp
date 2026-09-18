@@ -13,7 +13,18 @@
 # include "../AnalogVbat/median.h"
 # include "../CONFIG/config.h"
 static volatile int analogReadings[ADC_MAX_DEVICES + MAX_ADC_CHANNELS];
-// extern TxConfig config;
+# if defined(PLATFORM_ESP32)
+# include "esp_adc_cal.h"
+# endif
+# include "../PWM/PWM.h"
+struct Gauge {
+    int channel = -1;
+    int lowMillis = 6400;
+    int highMillis = 7400;
+    int scale = 60; // less than 1000
+    int duty = 0;
+};
+static Gauge gauge;
 #else
 static volatile int analogReadings[ADC_MAX_DEVICES];
 #endif
@@ -28,6 +39,16 @@ struct CalibState {
     volatile uint32_t counter = 0;
 };
 static CalibState calibState;
+
+void setGaugeMin(uint16_t v) {
+    gauge.lowMillis = v;
+}
+void setGaugeMax(uint16_t v) {
+    gauge.highMillis = v;
+}
+void setGaugeScale(uint16_t v) {
+    gauge.scale = v;
+}
 
 static bool initialize() {
 #if defined(PLATFORM_ESP32)
@@ -94,6 +115,31 @@ static int start()
 #endif
 #if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
     if (GPIO_PIN_ADC_INPUTS_COUNT > 0) {
+
+#if defined(PLATFORM_ESP32)
+        analogReadResolution(12);
+        int atten = hardware_int(HARDWARE_vbat_atten);
+        if (atten != -1) {
+            DBGLN("atten: %d", atten);
+            const bool useCal = atten > ADC_11db;
+            if (useCal) {
+                atten -= (ADC_11db + 1);
+                DBGLN("usecal atten: %d", atten);
+                static esp_adc_cal_characteristics_t cx;
+                const int sourcePin = hardware_pin(HARDWARE_vbat);
+                const int8_t channel = digitalPinToAnalogChannel(sourcePin);
+                const adc_unit_t unit = (channel > (SOC_ADC_MAX_CHANNEL_NUM - 1)) ? ADC_UNIT_2 : ADC_UNIT_1;
+                esp_adc_cal_characterize(unit, (adc_atten_t)atten, ADC_WIDTH_BIT_12, 3300, &cx);
+            }
+            analogSetPinAttenuation(hardware_pin(HARDWARE_vbat), (adc_attenuation_t)atten);
+        }
+#endif
+        if (int gaugePin = hardware_pin(HARDWARE_gauge_pwm); gaugePin != UNDEF_PIN) {
+            gauge.channel = PWM.allocate(gaugePin, 10000);        
+            DBGLN("GaugeChannel: %u / %u", gauge.channel, gaugePin);
+            PWM.setDuty(gauge.channel, 100);            
+        }
+        
         return DURATION_IMMEDIATELY;
     }
 #endif    
@@ -177,6 +223,17 @@ static int timeout()
                 ChannelData[ch] = CRSF_CHANNEL_VALUE_MID;
             }
         }
+        if (gauge.channel >= 0) {
+            const int gaugeD = vbatMillis - gauge.lowMillis;
+            if (gaugeD <= 0) {
+                PWM.setDuty(gauge.channel, 0);                        
+            }
+            else {
+                const int gd = std::max(1, (gauge.highMillis - gauge.lowMillis));
+                gauge.duty = std::min(gauge.scale, (gaugeD * gauge.scale) / gd);
+                PWM.setDuty(gauge.channel, gauge.duty);                        
+            }
+        }
     }    
     static int counter = 0;
     if (++counter > 20) {
@@ -184,6 +241,7 @@ static int timeout()
         DBGLN("ADC pin: %u, vbat: %u, a0: %u, a1: %u", hardware_pin(HARDWARE_vbat), vbat, analogReadings[ADC_MAX_DEVICES + 0], analogReadings[ADC_MAX_DEVICES + 1]);
         DBGLN("VBatMillis: %u", vbatMillis);
         DBGLN("CH0: %u, min %u, max %u", ChannelData[0], config.GetCalibration(0).min, config.GetCalibration(0).max);
+        DBGLN("Gauge ch: %u duty: %u", gauge.channel, gauge.duty);
     }
 #endif
     fullWait = true;
