@@ -12,6 +12,7 @@
 # include "../include/crsf_protocol.h"
 # include "../AnalogVbat/median.h"
 # include "../CONFIG/config.h"
+static int analogDead = 2;
 static volatile int analogReadings[ADC_MAX_DEVICES + MAX_ADC_CHANNELS];
 # if defined(PLATFORM_ESP32)
 # include "esp_adc_cal.h"
@@ -49,6 +50,9 @@ void setGaugeMax(uint16_t v) {
 void setGaugeScale(uint16_t v) {
     gauge.scale = v;
 }
+void setAnalogDeadband(uint16_t v) {
+    analogDead = v;
+}
 
 static bool initialize() {
 #if defined(PLATFORM_ESP32)
@@ -79,10 +83,10 @@ uint16_t analogToCrsf(const uint16_t ch, const uint16_t an) {
     const tx_config_t::analog_calibration_t::chan_calib c = config.GetCalibration(ch);
     const int d = (an - c.mid);
     float dn = 0.0f;
-    if (d < 0) {
+    if (d < -(analogDead)) {
         dn = (1.0f * d) / std::max(100, (c.mid - c.min));
     }
-    else if (d > 0) {
+    else if (d > (analogDead)) {
         dn = (1.0f * d) / std::max(100, (c.max - c.mid));
     }
     const int delta = dn * (CRSF_CHANNEL_VALUE_STD_MAX - CRSF_CHANNEL_VALUE_STD_MIN) / 2;
