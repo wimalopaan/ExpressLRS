@@ -13,6 +13,7 @@
 # include "../AnalogVbat/median.h"
 # include "../CONFIG/config.h"
 static int analogDead = 2;
+static int analogFilterCenti = 90;
 static volatile int analogReadings[ADC_MAX_DEVICES + MAX_ADC_CHANNELS];
 # if defined(PLATFORM_ESP32)
 # include "esp_adc_cal.h"
@@ -52,6 +53,9 @@ void setGaugeScale(uint16_t v) {
 }
 void setAnalogDeadband(uint16_t v) {
     analogDead = v;
+}
+void setAnalogFilter(uint16_t v) {
+    analogFilterCenti = v;
 }
 
 static bool initialize() {
@@ -185,10 +189,10 @@ static int timeout()
 #endif
 #if defined(WMEXTENSION) && defined (WMRXTX_ANALOG)
     const int maxAdcChannels = std::min(MAX_ADC_CHANNELS, GPIO_PIN_ADC_INPUTS_COUNT);
-    const float f = 0.1f;
+    const float f = analogFilterCenti / 100.0f;
     for (int ch = 0; ch < maxAdcChannels; ++ch) {
         const int8_t pin = GPIO_PIN_ADC_INPUTS[ch];
-        analogReadings[ADC_MAX_DEVICES + ch] = (1.0f - f) * analogReadings[ADC_MAX_DEVICES + ch] + f * analogRead(pin);
+        analogReadings[ADC_MAX_DEVICES + ch] = f * analogReadings[ADC_MAX_DEVICES + ch] + (1.0 - f) * analogRead(pin);
     }
     const uint32_t vbat = analogRead(hardware_pin(HARDWARE_vbat));
     static MedianAvgFilter<uint16_t, 5> smooth;
