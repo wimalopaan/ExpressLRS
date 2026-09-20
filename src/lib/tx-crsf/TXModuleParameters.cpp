@@ -14,6 +14,7 @@
 
 #if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
 #include "devADC.h"
+extern void setAnalogDeadband(uint16_t);
 extern void setGaugeMin(uint16_t);
 extern void setGaugeMax(uint16_t);
 extern void setGaugeScale(uint16_t);
@@ -197,6 +198,11 @@ static folderParameter luaAnalogFolder = {
 static commandParameter luaStartCalibration = {
     {"Start calibration", CRSF_COMMAND},
     lcsIdle, // step
+    STR_EMPTYSPACE
+};
+static int8Parameter luaAnalogDeadband = {
+    {"Analog Deadband", CRSF_UINT8},
+    5, 1, 100,
     STR_EMPTYSPACE
 };
 static int8Parameter luaGaugeMin = {
@@ -1047,6 +1053,10 @@ void TXModuleEndpoint::registerParameters()
             break;
         }
   }, luaAnalogFolder.common.id);
+  registerParameter(&luaAnalogDeadband, [this](propertiesCommon *item, uint16_t arg) {
+      luaAnalogDeadband.properties.u.value = arg;
+      setAnalogDeadband(arg);
+    }, luaAnalogFolder.common.id);
   registerParameter(&luaGaugeMin, [this](propertiesCommon *item, uint16_t arg) {
       luaGaugeMin.properties.u.value = arg;
       setGaugeMin(arg * 100);
