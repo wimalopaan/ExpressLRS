@@ -123,6 +123,16 @@ static int start()
 #endif
 #if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
     if (GPIO_PIN_ADC_INPUTS_COUNT > 0) {
+        const int maxAdcChannels = std::min(MAX_ADC_CHANNELS, GPIO_PIN_ADC_INPUTS_COUNT);
+        for (int ch = 0; ch < maxAdcChannels; ++ch) {
+            const int8_t pin = GPIO_PIN_ADC_INPUTS[ch];
+            if (digitalPinToAnalogChannel(pin) != -1) {
+                pinMode(pin, INPUT);
+            }
+            else {
+                pinMode(pin, INPUT_PULLUP);
+            }
+        }
 
 #if defined(PLATFORM_ESP32)
         analogReadResolution(12);
@@ -142,10 +152,13 @@ static int start()
             analogSetPinAttenuation(hardware_pin(HARDWARE_vbat), (adc_attenuation_t)atten);
         }
 #endif
-        if (int gaugePin = hardware_pin(HARDWARE_gauge_pwm); gaugePin != UNDEF_PIN) {
-            gauge.channel = PWM.allocate(gaugePin, 10000);        
-            DBGLN("GaugeChannel: %u / %u", gauge.channel, gaugePin);
-            PWM.setDuty(gauge.channel, 100);            
+        {
+            const int gaugePin = hardware_pin(HARDWARE_gauge_pwm); 
+            if (gaugePin != UNDEF_PIN) {
+                gauge.channel = PWM.allocate(gaugePin, 10000);        
+                DBGLN("GaugeChannel: %u / %u", gauge.channel, gaugePin);
+                PWM.setDuty(gauge.channel, 100);            
+            }
         }
         
         return DURATION_IMMEDIATELY;
@@ -192,7 +205,9 @@ static int timeout()
     const float f = analogFilterCenti / 100.0f;
     for (int ch = 0; ch < maxAdcChannels; ++ch) {
         const int8_t pin = GPIO_PIN_ADC_INPUTS[ch];
-        analogReadings[ADC_MAX_DEVICES + ch] = f * analogReadings[ADC_MAX_DEVICES + ch] + (1.0 - f) * analogRead(pin);
+        if (digitalPinToAnalogChannel(pin) != -1) {
+            analogReadings[ADC_MAX_DEVICES + ch] = f * analogReadings[ADC_MAX_DEVICES + ch] + (1.0 - f) * analogRead(pin);
+        }
     }
     const uint32_t vbat = analogRead(hardware_pin(HARDWARE_vbat));
     static MedianAvgFilter<uint16_t, 5> smooth;
@@ -224,8 +239,19 @@ static int timeout()
     else {
         for (int ch = 0; ch < (CRSF_NUM_CHANNELS + CRSF_EXTRA_CHANNELS); ++ch) {
             if (ch < maxAdcChannels) {
-                const float f = (1.0f * config.GetVBatCalib()) / vbatMillis;
-                ChannelData[ch] = analogToCrsf(ch, (f * analogReadings[ADC_MAX_DEVICES + ch]));
+                const int8_t pin = GPIO_PIN_ADC_INPUTS[ch];
+                if (digitalPinToAnalogChannel(pin) != -1) {
+                    const float f = (1.0f * config.GetVBatCalib()) / vbatMillis;
+                    ChannelData[ch] = analogToCrsf(ch, (f * analogReadings[ADC_MAX_DEVICES + ch]));
+                }
+                else {
+                    if (digitalRead(pin) == HIGH) {
+                        ChannelData[ch] = CRSF_CHANNEL_VALUE_STD_MAX;                        
+                    }
+                    else {
+                        ChannelData[ch] = CRSF_CHANNEL_VALUE_STD_MIN;                        
+                    }
+                }
             }
             else {
                 ChannelData[ch] = CRSF_CHANNEL_VALUE_MID;
