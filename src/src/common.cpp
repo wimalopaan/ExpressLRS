@@ -1,18 +1,28 @@
 #include "common.h"
 #include "OTA.h"
 
-#if defined(WMESPNOW_RECV) 
-# include "rx_dummyradio.h"
+#if defined(WMESPNOW_RECV) || defined(WMESPNOW_SERIAL_NO_RADIO)
+# include "common_dummyradio.h"
 
 DummyRadio Radio;
 
+#if defined(RADIO_SX127X) || defined(RADIO_SX128X)
 expresslrs_mod_settings_s ExpressLRS_AirRateConfig[RATE_MAX] = {
     {0, RadioBandMod::Combined::LORA_900, RATE_LORA_900_200HZ, 0, 0, 0,  8, TLM_RATIO_1_64, 4,  5000, 0, 1},
 };
-
 expresslrs_rf_pref_params_s ExpressLRS_AirRateRFperf[RATE_MAX] = {
     {0, -112,  4380, 3000, 2500, 600, 5000, SNR_SCALE( 1), SNR_SCALE(3.0)},
 };
+#endif
+#if defined(RADIO_LR1121)
+#include "LR1121Driver.h"
+expresslrs_mod_settings_s ExpressLRS_AirRateConfig[RATE_MAX] = {
+    {0,  RadioBandMod::Combined::GFSK_900,  RATE_FSK_900_1000HZ_8CH,  LR11XX_RADIO_GFSK_BITRATE_300k, LR11XX_RADIO_GFSK_BW_467000, LR11XX_RADIO_GFSK_FDEV_100k, 16, LR11XX_RADIO_GFSK_BITRATE_300k, LR11XX_RADIO_GFSK_BW_467000, LR11XX_RADIO_GFSK_FDEV_100k, 16, TLM_RATIO_1_128, 2,  1000, OTA8_PACKET_SIZE, 1}
+};
+expresslrs_rf_pref_params_s ExpressLRS_AirRateRFperf[RATE_MAX] = {
+    {0,  -101,   658, 2500, 2500,   3,  5000, DYNPOWER_SNR_THRESH_NONE, DYNPOWER_SNR_THRESH_NONE}
+};
+#endif
 
 #else
 

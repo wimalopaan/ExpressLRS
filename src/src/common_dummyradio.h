@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SX12xxDriverCommon.h"
+#include "LR1121Driver.h"
 #include "deferred.h" // falls deferExecutionMicros gebraucht werden soll
 
 class DummyRadio : public SX12xxDriverCommon
@@ -20,11 +21,19 @@ public:
     void Config(uint8_t bw, uint8_t sf, uint8_t cr, uint32_t freq,
                 uint8_t PreambleLength, bool InvertIQ, uint8_t PayloadLength,
                 uint32_t flrcSyncWord, uint16_t flrcCrcSeed, uint8_t modulation);
+
+    void Config(uint8_t bw, uint8_t sf, uint8_t cr, uint32_t freq,
+                uint8_t PreambleLength, bool InvertIQ, uint8_t PayloadLength,
+                RadioBandMod::Combined, uint8_t flrcCrcSeed, uint8_t modulation){};
+    void Config(uint8_t bw, uint8_t sf, uint8_t cr, uint32_t freq,
+                uint8_t PreambleLength, bool InvertIQ, uint8_t PayloadLength,
+                RadioBandMod::Combined, uint8_t flrcCrcSeed, uint8_t modulation, uint8_t){};
     
     
     void SetMode(uint8_t /*mode*/, SX12XX_Radio_Number_t /*radioNumber*/) {}
     void SetFrequencyReg(uint32_t /*freq*/, SX12XX_Radio_Number_t /*radioNumber*/, bool /*doRx*/ = false) {}
     void SetOutputPower(int8_t /*power*/) {}
+    void SetOutputPower(int8_t /*power*/, bool) {}
     void SetTxIdleMode() {}
 
     void TXnb(uint8_t * /*data*/, bool /*sendGeminiBuffer*/, uint8_t * /*dataGemini*/, SX12XX_Radio_Number_t /*radioNumber*/);
@@ -36,7 +45,9 @@ public:
 
     bool GetRxBufferAddr(SX12XX_Radio_Number_t /*radioNumber*/, uint8_t * /*rxBufferAddr*/) { return false; }
     int8_t GetRssiInst(SX12XX_Radio_Number_t /*radioNumber*/) { return 0; }
-    void GetLastPacketStats() {}
+    void  StartRssiInst(SX12XX_Radio_Number_t /*radioNumber*/) {}
+    firmware_version_t GetFirmwareVersion(SX12XX_Radio_Number_t /*radioNumber*/) {return {};}
+    int GetLastPacketStats() {return 0;}
     void CheckForSecondPacket() {}
 
     bool FrequencyErrorAvailable() const {return false;}

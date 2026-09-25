@@ -307,10 +307,11 @@ enum eAuxChannels : uint8_t
 
 #ifndef UNIT_TEST
 
-#if defined(WMESPNOW_RECV)
-# include "../src/rx_dummyradio.h"
+#if defined(WMESPNOW_RECV) || defined(WMESPNOW_SERIAL_NO_RADIO)
+# include "../src/common_dummyradio.h"
 #define RATE_MAX 1
 #define RATE_BINDING RATE_LORA_2G4_50HZ
+#define RATE_DUALBAND_BINDING RATE_LORA_2G4_50HZ
 
 extern DummyRadio Radio;
 

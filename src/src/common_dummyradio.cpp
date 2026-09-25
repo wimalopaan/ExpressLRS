@@ -1,4 +1,4 @@
-#include "rx_dummyradio.h"
+#include "common_dummyradio.h"
 #include "logging.h"
 
 DummyRadio::DummyRadio()
