@@ -1,7 +1,9 @@
 #pragma once
 
 #include "SX12xxDriverCommon.h"
-#include "LR1121Driver.h"
+#if defined(RADIO_LR1121)
+# include "LR1121Driver.h"
+#endif
 #include "deferred.h" // falls deferExecutionMicros gebraucht werden soll
 
 class DummyRadio : public SX12xxDriverCommon
@@ -46,7 +48,9 @@ public:
     bool GetRxBufferAddr(SX12XX_Radio_Number_t /*radioNumber*/, uint8_t * /*rxBufferAddr*/) { return false; }
     int8_t GetRssiInst(SX12XX_Radio_Number_t /*radioNumber*/) { return 0; }
     void  StartRssiInst(SX12XX_Radio_Number_t /*radioNumber*/) {}
+#if defined(RADIO_LR1121)
     firmware_version_t GetFirmwareVersion(SX12XX_Radio_Number_t /*radioNumber*/) {return {};}
+#endif
     int GetLastPacketStats() {return 0;}
     void CheckForSecondPacket() {}
 
