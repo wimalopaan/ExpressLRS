@@ -574,6 +574,9 @@ static void GetConfiguration(AsyncWebServerRequest *request)
     settings["target"] = &target_name[4];
     settings["version"] = VERSION;
     settings["git-commit"] = commit;
+#if defined(WMEXTENSION) && (defined(WMESPNOW_SERIAL_NO_RADIO) || defined(WMESPNOW))
+    settings["mac-address"] = WiFi.macAddress();
+#endif
 #if defined(TARGET_TX)
     settings["module-type"] = "TX";
 #endif

@@ -5,6 +5,10 @@
 
 #include <set>
 
+#if defined(WMEXTENSION) && defined(TARGET_TX) && defined(WMRELAY)
+#include "CRSFAddressMapper.h"
+#endif
+
 /**
  * @class CRSFConnector
  *
@@ -70,7 +74,14 @@ public:
      * @param message A pointer to the CRSF message header structure containing the data to be logged.
      */
     static void debugCRSF(const char * str, const crsf_header_t * message);
-
+    
+#if defined(WMEXTENSION) && defined(TARGET_TX) && defined(WMRELAY)
+    void setAddressMapper(CRSFAddressMapper *mapper) {
+            m_address_mapper = mapper;
+    }
+protected:
+   CRSFAddressMapper *m_address_mapper = nullptr;
+#endif
 private:
     std::set<crsf_addr_e> devices;
 };

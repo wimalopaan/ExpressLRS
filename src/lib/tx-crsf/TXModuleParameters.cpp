@@ -440,7 +440,11 @@ void TXModuleEndpoint::sendELRSstatus(const crsf_addr_e origin)
   // to support sending a params.msg, buffer should be extended by the strlen of the message
   // and copied into params->msg (with trailing null)
   strcpy(params->msg, warningInfo);
+#if defined(WMEXTENSION) && defined(WMRELAY)
+  crsfRouter.SetExtendedHeaderAndCrc((crsf_ext_header_t *)buffer, CRSF_FRAMETYPE_ELRS_STATUS, CRSF_EXT_FRAME_SIZE(payloadSize), origin, CRSF_ADDRESS_CRSF_REPEATER_TRANSMITTER);
+#else
   crsfRouter.SetExtendedHeaderAndCrc((crsf_ext_header_t *)buffer, CRSF_FRAMETYPE_ELRS_STATUS, CRSF_EXT_FRAME_SIZE(payloadSize), origin, CRSF_ADDRESS_CRSF_TRANSMITTER);
+#endif
   crsfRouter.processMessage(nullptr, (crsf_header_t *)buffer);
 }
 

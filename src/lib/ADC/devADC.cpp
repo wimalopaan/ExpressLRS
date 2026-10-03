@@ -269,14 +269,14 @@ static int timeout()
             }
         }
     }    
-    static int counter = 0;
-    if (++counter > 20) {
-        counter = 0;
-        DBGLN("ADC pin: %u, vbat: %u, a0: %u, a1: %u", hardware_pin(HARDWARE_vbat), vbat, analogReadings[ADC_MAX_DEVICES + 0], analogReadings[ADC_MAX_DEVICES + 1]);
-        DBGLN("VBatMillis: %u", vbatMillis);
-        DBGLN("CH0: %u, min %u, max %u", ChannelData[0], config.GetCalibration(0).min, config.GetCalibration(0).max);
-        DBGLN("Gauge ch: %u duty: %u", gauge.channel, gauge.duty);
-    }
+    // static int counter = 0;
+    // if (++counter > 20) {
+    //     counter = 0;
+    //     DBGLN("ADC pin: %u, vbat: %u, a0: %u, a1: %u", hardware_pin(HARDWARE_vbat), vbat, analogReadings[ADC_MAX_DEVICES + 0], analogReadings[ADC_MAX_DEVICES + 1]);
+    //     DBGLN("VBatMillis: %u", vbatMillis);
+    //     DBGLN("CH0: %u, min %u, max %u", ChannelData[0], config.GetCalibration(0).min, config.GetCalibration(0).max);
+    //     DBGLN("Gauge ch: %u duty: %u", gauge.channel, gauge.duty);
+    // }
 #endif
     fullWait = true;
     return ADC_READING_PERIOD_MS;
