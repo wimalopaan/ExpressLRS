@@ -106,8 +106,15 @@ void TXModuleEndpoint::handleMessage(const crsf_header_t *message)
 void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message, const uint8_t offset = 0) // data is packed as 11 bits per channel
 {
 #if defined(WMRXTX_ANALOG)
-    return; // no data from handset (or elrs-buddy)
-#else
+    uint8_t rcPacketChannels = CRSF_NUM_CHANNELS;
+    uint8_t rcPacketOffset = offset;
+    if (offset < 16) {
+        const uint8_t maxAdcChannels = std::min(MAX_ADC_CHANNELS, GPIO_PIN_ADC_INPUTS_COUNT);
+        rcPacketChannels -= maxAdcChannels;            
+        rcPacketOffset = maxAdcChannels;
+    }
+#endif
+    
     const auto payload = (uint8_t *)message + sizeof(crsf_header_t);
     constexpr unsigned srcBits = 11;
     constexpr unsigned dstBits = 11;
@@ -134,8 +141,11 @@ void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message, cons
         bitsMerged -= srcBits;
     }
 
+#if defined(WMRXTX_ANALOG)
+    handset->PerformChannelOverrides(&localChannelData[rcPacketOffset], rcPacketChannels, rcPacketOffset);
+#else
     handset->PerformChannelOverrides(localChannelData, CRSF_NUM_CHANNELS, offset);
-
+#endif
     //
     // sends channel data and also communicates commanded armed status in arming mode Switch.
     // frame len 24 -> arming mode CH5: use channel 5 value
@@ -174,6 +184,9 @@ void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message, cons
 #endif
     }
 
+#if defined(WMRXTX_ANALOG)
+    handset->RCDataReceived(&localChannelData[rcPacketOffset], rcPacketChannels, rcPacketOffset);
+#else 
     handset->RCDataReceived(localChannelData, CRSF_NUM_CHANNELS, offset);
 #endif
 }

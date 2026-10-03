@@ -1,5 +1,4 @@
 -DMY_BINDING_PHRASE="wimalopaan"
 -DRegulatory_Domain_EU_CE_2400
+-DRegulatory_Domain_EU_868
 -DAUTO_WIFI_ON_INTERVAL="60"
--DLOCK_ON_FIRST_CONNECTION
--DRX_AS_TX="internal"

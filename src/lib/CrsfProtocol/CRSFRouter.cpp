@@ -120,7 +120,11 @@ void CRSFRouter::makeLinkStatisticsPacket(crsf_header_t *frame)
     // Note: size of crsfLinkStatistics_t used, not full elrsLinkStatistics_t
     constexpr uint8_t payloadLen = sizeof(crsfLinkStatistics_t);
     memcpy(frame->payload, &linkStats, payloadLen);
+#if defined(WMEXTENSION) && defined(TARGET_TX) && defined(WMRELAY)
+    SetHeaderAndCrc(frame, CRSF_FRAMETYPE_LINK_STATISTICS_REPEATER, CRSF_FRAME_SIZE(payloadLen));
+#else
     SetHeaderAndCrc(frame, CRSF_FRAMETYPE_LINK_STATISTICS, CRSF_FRAME_SIZE(payloadLen));
+#endif
 }
 
 void CRSFRouter::SetMspV2Request(uint8_t *frame, const uint16_t function, const uint8_t *payload, const uint8_t payloadLength)
