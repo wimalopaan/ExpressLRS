@@ -1,5 +1,6 @@
 #include "SerialCRSF.h"
 
+#include "ESPNOWConnector.h"
 #include "OTA.h"
 #include "common.h"
 #include "device.h"
@@ -79,6 +80,15 @@ uint32_t SerialCRSF::sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t
     _outputPort->write(outBuffer, sizeof(outBuffer));
     _outputPort->write((byte *)&PackedRCdataOut, sizeof(PackedRCdataOut));
     _outputPort->write(crc);
+
+#if defined(ESPNOW_BRIDGE_MASTER)
+    // Forward the same RC frame to the slave receiver(s)
+    uint8_t espnowFrame[sizeof(outBuffer) + sizeof(PackedRCdataOut) + 1];
+    memcpy(espnowFrame, outBuffer, sizeof(outBuffer));
+    memcpy(espnowFrame + sizeof(outBuffer), &PackedRCdataOut, sizeof(PackedRCdataOut));
+    espnowFrame[sizeof(espnowFrame) - 1] = crc;
+    espnowBridge.transmitSlot(espnowFrame, sizeof(espnowFrame));
+#endif
     return DURATION_IMMEDIATELY;
 }
 

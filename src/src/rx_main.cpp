@@ -18,6 +18,7 @@
 #include "rx-serial/SerialIO.h"
 #include "rx-serial/SerialNOOP.h"
 #include "rx-serial/SerialCRSF.h"
+#include "ESPNOWConnector.h"
 #include "rx-serial/SerialSBUS.h"
 #include "rx-serial/SerialSUMD.h"
 #include "rx-serial/SerialAirPort.h"
@@ -2060,7 +2061,10 @@ void setup()
             }
         }
         crsfRouter.addEndpoint(&crsfReceiver);
+#if !defined(ESPNOW_BRIDGE_SLAVE)
+        // The slave has no RF link to the TX; its telemetry reaches the master via the ESP-NOW bridge
         crsfRouter.addConnector(&otaConnector);
+#endif
         setupSerial();
         setupSerial1();
 
@@ -2068,6 +2072,10 @@ void setup()
         devicesInit();
 
         setupBindingFromConfig();
+
+#if defined(ESPNOW_BRIDGE_ENABLED)
+        espnowBridge.begin(UID, UID_LEN);
+#endif
 
         FHSSrandomiseFHSSsequence(OtaGetUidSeed());
 
@@ -2108,6 +2116,10 @@ void loop()
     }
 
     devicesUpdate(now);
+
+#if defined(ESPNOW_BRIDGE_ENABLED)
+    espnowBridge.process();
+#endif
 
     // read and process any data from serial ports, send any queued non-RC data
     handleSerialIO();
