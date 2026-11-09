@@ -25,7 +25,7 @@ public:
 
     uint32_t sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t* channelData) override;
 private:
-    Crc2Byte crc2Byte;
+    Crc2Byte crc2Byte {};
     void processBytes(uint8_t *bytes, uint16_t size) override {};
 
     enum class State : uint8_t {CH1_16, CH1_8_17_24, CH1_8_25_32, CH1_12_SW};
