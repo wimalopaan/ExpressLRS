@@ -1,7 +1,7 @@
 #include "common.h"
 #include "OTA.h"
 
-#if defined(WMESPNOW_RECV) || defined(WMESPNOW_SERIAL_NO_RADIO)
+#if defined(WMESPNOW_SLAVE)
 # include "common_dummyradio.h"
 
 DummyRadio Radio;

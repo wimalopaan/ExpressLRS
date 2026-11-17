@@ -11,7 +11,7 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 
-#if defined(WMESPNOW_RECV) || defined(WMESPNOW_SERIAL_NO_RADIO)
+#if defined(WMESPNOW_SLAVE)
 extern DummyRadio Radio;
 #else
 #if defined(RADIO_SX127X)

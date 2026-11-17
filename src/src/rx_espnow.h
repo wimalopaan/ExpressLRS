@@ -22,7 +22,7 @@ struct EspNowMaster : public CRSFConnector {
     void sendHeartbeat();
     void timeout();
 private:
-#if defined(WMESPNOW_RECV)
+#if defined(WMESPNOW_SLAVE)
     void rcPacketToChannelsData(const crsf_header_t *message);
 #else
     void sendRCFrame();

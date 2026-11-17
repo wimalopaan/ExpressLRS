@@ -67,7 +67,7 @@ inline bool isPrioritised(const crsf_frame_type_e frameType)
 
 RXOTAConnector::RXOTAConnector()
 {
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX) && !defined(WMESPNOW_RECV)
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX) && !defined(WMESPNOW_SLAVE)
     addDevice(CRSF_ADDRESS_RADIO_TRANSMITTER);
     addDevice(CRSF_ADDRESS_CRSF_TRANSMITTER);
 #endif

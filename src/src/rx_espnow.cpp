@@ -43,7 +43,7 @@ static std::array<uint8_t, 6> broadcastAddress = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 
 
 // 10:00:3B:C4:4C:30
 
-#if defined(WMESPNOW_RECV)
+#if defined(WMESPNOW_SLAVE)
 // slave
 # if defined(PLATFORM_ESP32)
 #  if defined(CONFIG_IDF_TARGET_ESP32C3)
@@ -119,7 +119,7 @@ namespace {
     }
 #endif
 }
-#if defined(WMESPNOW_RECV)
+#if defined(WMESPNOW_SLAVE)
 // downlink
 // slave -> master
 void EspNowMaster::forwardMessage(const crsf_header_t* const message) {
@@ -319,7 +319,7 @@ void EspNowMaster::processBytes(const uint8_t* const data, const int len) {
     }
 }
 #endif
-#if defined(WMESPNOW_RECV)
+#if defined(WMESPNOW_SLAVE)
 void EspNowMaster::rcPacketToChannelsData(const crsf_header_t* const message) {
     const auto payload = (uint8_t *)message + sizeof(crsf_header_t);
     constexpr unsigned srcBits = 11;
@@ -461,7 +461,7 @@ void EspNowMaster::sendHeartbeat(){
     crsfRouter.SetHeaderAndCrc((crsf_header_t *)&rcPacket, CRSF_FRAMETYPE_HEARTBEAT, sizeof(rcPacket) - 2);
     espNow.forwardMessage((crsf_header_t*)&rcPacket);
 }
-#if !defined(WMESPNOW_RECV)
+#if !defined(WMESPNOW_SLAVE)
 void EspNowMaster::sendRCFrame(){
     CRSF_MK_FRAME_T(crsf_channels_t) rcPacket = {0};
     constexpr unsigned dstBits = 11;
@@ -514,7 +514,7 @@ bool EspNowMaster::menuMode(){
     }
     return false;
 }
-#if defined(WMESPNOW_RECV)
+#if defined(WMESPNOW_SLAVE)
 // slave
 void EspNowMaster::timeout() {
     if (!isInitialized) {

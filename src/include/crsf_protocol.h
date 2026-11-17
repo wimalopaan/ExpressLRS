@@ -143,7 +143,7 @@ typedef enum : uint8_t
     CRSF_ADDRESS_RESERVED2 = 0xCA,
     CRSF_ADDRESS_RACE_TAG = 0xCC,
     CRSF_ADDRESS_RADIO_TRANSMITTER = 0xEA,
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX) && defined(WMESPNOW_RECV)
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX) && defined(WMESPNOW_SLAVE)
     // CRSF_ADDRESS_CRSF_REPEATER_RECEIVER = 0xEB,
     CRSF_ADDRESS_CRSF_RECEIVER = 0xEB,
 #else

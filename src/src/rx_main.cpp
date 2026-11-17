@@ -249,7 +249,7 @@ bool BindingModeRequest = false;
 extern void setWifiUpdateMode();
 void reconfigureSerial();
 
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX) && defined(WMESPNOW_RECV)
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX) && defined(WMESPNOW_SLAVE)
 uint8_t getLq()
 {
     return 100;
@@ -2241,7 +2241,7 @@ void setup()
         crsfRouter.addEndpoint(&crsfReceiver);
 
 #if defined(WMEXTENSION) && defined(TARGET_RX) && defined(WMESPNOW)
-# if !defined(WMESPNOW_RECV)
+# if !defined(WMESPNOW_SLAVE)
         crsfRouter.addConnector(&otaConnector);
 # endif
         crsfRouter.addConnector(&espNow);
@@ -2288,7 +2288,7 @@ void setup()
     // Resetting the time here give the first mode a better chance of connection.
     RFmodeLastCycled = millis();
 
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(WMESPNOW_RECV) && defined(TARGET_RX)
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(WMESPNOW_SLAVE) && defined(TARGET_RX)
     hwTimer::resume();
 #endif        
 }
@@ -2354,7 +2354,7 @@ void loop()
         return;
     }
     
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX) && defined(WMESPNOW_RECV)
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX) && defined(WMESPNOW_SLAVE)
     return;
 #endif
     
