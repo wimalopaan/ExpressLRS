@@ -8,6 +8,7 @@
 
 #include "OTA.h"
 #include <cassert>
+#include <array>
 
 static_assert(sizeof(OTA_Packet4_s) == OTA4_PACKET_SIZE, "OTA4 packet struct is invalid!");
 static_assert(sizeof(OTA_Packet8_s) == OTA8_PACKET_SIZE, "OTA8 packet struct is invalid!");

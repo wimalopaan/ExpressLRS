@@ -49,6 +49,7 @@ std::array<SerialEvent, 2>    serial_events{SerialEvent::None, SerialEvent::None
 #if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
 #include "rx_espnow.h"
 #endif
+#include "RxRadioMode.h"
 
 #include "devAnalogVbat.h"
 #include "devBaro.h"
@@ -100,6 +101,9 @@ std::array<SerialEvent, 2>    serial_events{SerialEvent::None, SerialEvent::None
 ///////////////////
 
 device_affinity_t ui_devices[] = {
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
+  {&ESPNOW_device, 1},
+#endif
   {&Serial0_device, 1},
 #if defined(PLATFORM_ESP32)
   {&Serial1_device, 1},
@@ -112,9 +116,6 @@ device_affinity_t ui_devices[] = {
   {&RXLUA_device, 0},
   {&RGB_device, 0},
   {&WIFI_device, 0},
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
-  {&ESPNOWSender_device, 0},
-#endif
   {&Button_device, 0},
   {&AnalogVbat_device, 0},
   {&ServoOut_device, 1},
@@ -138,7 +139,7 @@ CRSFRouter crsfRouter;
 RXEndpoint crsfReceiver;
 RXOTAConnector otaConnector;
 #if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
-EspNowMaster espNow;
+EspNowConnector espNow;
 #endif
 
 bool crsfBatterySensorDetected = false;
@@ -249,17 +250,12 @@ bool BindingModeRequest = false;
 extern void setWifiUpdateMode();
 void reconfigureSerial();
 
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX) && defined(WMESPNOW_SLAVE)
 uint8_t getLq()
 {
-    return 100;
-}
-#else
-uint8_t getLq()
-{
+    if (!isRadioEnabled())
+        return connectionState == connected ? 100 : 0;
     return LQCalc.getLQ();
 }
-#endif
 
 bool getGpsTelemetry(gps_telemetry_t &out)
 {
@@ -1779,6 +1775,9 @@ static void setupRadio()
 {
     ChannelDataReset();
 
+    if (!isRadioEnabled())
+        return;
+
     Radio.currFreq = FHSSgetInitialFreq();
 #if defined(RADIO_SX127X)
     //Radio.currSyncWord = UID[3];
@@ -2014,6 +2013,13 @@ void EnterBindingModeSafely()
     if (connectionState == serialUpdate || InBindingMode)
         return;
 
+    if (!isRadioEnabled())
+    {
+        DBGLN("RF binding unavailable; configure the ESP-NOW UID via Wi-Fi");
+        setWifiUpdateMode();
+        return;
+    }
+
     // Never enter wifi mode after requesting to enter binding mode
     webserverPreventAutoStart = true;
 
@@ -2141,6 +2147,12 @@ static void updateSwitchMode()
 
 static void CheckConfigChangePending()
 {
+    if (!isRadioEnabled())
+    {
+        if (config.IsModified() && connectionState < NO_CONFIG_SAVE_STATES)
+            devicesTriggerEvent(config.Commit());
+        return;
+    }
     if (config.IsModified() && !InBindingMode && connectionState < NO_CONFIG_SAVE_STATES)
     {
         LostConnection(false);
@@ -2185,7 +2197,11 @@ void resetConfigAndReboot()
 
 void setup()
 {
-    if (!options_init())
+    bool hardwareReady = options_init();
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
+    hardwareReady = hardwareReady && EspNowConnector::selectRadioMode();
+#endif
+    if (!hardwareReady)
     {
         // In the failure case we set the logging to the null logger so nothing crashes
         // if it decides to log something
@@ -2239,16 +2255,12 @@ void setup()
             }
         }
         crsfRouter.addEndpoint(&crsfReceiver);
-
+        if (isRadioEnabled())
+            crsfRouter.addConnector(&otaConnector);
 #if defined(WMEXTENSION) && defined(TARGET_RX) && defined(WMESPNOW)
-# if !defined(WMESPNOW_SLAVE)
-        crsfRouter.addConnector(&otaConnector);
-# endif
-        crsfRouter.addConnector(&espNow);
-#else 
-        crsfRouter.addConnector(&otaConnector);
+        if (EspNowConnector::enabled())
+            crsfRouter.addConnector(&espNow);
 #endif
-        
         setupSerial();
         setupSerial1();
 #if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3) && defined(TARGET_RX)
@@ -2264,11 +2276,7 @@ void setup()
 
         setupRadio();
 
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
-        espNow.start();
-#endif        
-        
-        if (connectionState != radioFailed)
+        if (isRadioEnabled() && connectionState != radioFailed)
         {
             // RFnoiseFloor = MeasureNoiseFloor(); //TODO move MeasureNoiseFloor to driver libs
             // DBGLN("RF noise floor: %d dBm", RFnoiseFloor);
@@ -2287,10 +2295,6 @@ void setup()
     // setup() eats up some of this time, which can cause the first mode connection to fail.
     // Resetting the time here give the first mode a better chance of connection.
     RFmodeLastCycled = millis();
-
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(WMESPNOW_SLAVE) && defined(TARGET_RX)
-    hwTimer::resume();
-#endif        
 }
 
 #if defined(PLATFORM_ESP32_C3)
@@ -2353,11 +2357,8 @@ void loop()
     {
         return;
     }
-    
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX) && defined(WMESPNOW_SLAVE)
-    return;
-#endif
-    
+    if (!isRadioEnabled())
+        return;
 
     if ((connectionState != disconnected) && (ExpressLRS_currAirRate_Modparams->index != ExpressLRS_nextAirRateIndex)) // forced change
     {

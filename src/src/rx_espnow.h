@@ -1,40 +1,74 @@
 #pragma once
 
-#include <cstdint>
-#include <array>
-
-#include "CRSFParser.h"
-#include "CRSFRouter.h"
-#include "device.h"
-#include "rx_wmextension.h"
-
 #if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
 
-extern device_t ESPNOWSender_device;
+#if defined(WMESPNOW_SLAVE)
+#include "../lib/EspNowLink/EspNowSlaveLink.h"
+#else
+#include "../lib/EspNowLink/EspNowMasterLink.h"
+#endif
+#include "../lib/EspNowLink/EspNowEvents.h"
+#include "../lib/EspNowRadio/EspNowRadio.h"
+#include "CRSFConnector.h"
+#include "device.h"
 
-struct EspNowMaster : public CRSFConnector {
-    void forwardMessage(const crsf_header_t *message) override;
-    void processBytes(const uint8_t* data, int len);
+class EspNowConnector final : public CRSFConnector
+{
+public:
+    void forwardMessage(const crsf_header_t *const message) override;
     void start();
     void stop();
-    void tick();
-    bool menuMode();
-    void sendHeartbeat();
-    void timeout();
+    void poll();
+    void onDeviceEvent();
+    void onReceive(const uint8_t *const mac, const uint8_t *const data, const size_t size);
+    void onSent(const bool success);
+    // Role specific: false if this role must not start the ESP-NOW link.
+    static bool enabled();
+    // Role specific: selects the RX radio mode at boot; false if the hardware configuration is invalid.
+    static bool selectRadioMode();
+    // Role specific: called once before the radio setup; false disables the ESP-NOW device.
+    static bool initialize();
+
 private:
+    enum class State : uint8_t
+    {
+        Stopped,
+        WaitingToStart,
+        Ready
+    };
 #if defined(WMESPNOW_SLAVE)
-    void rcPacketToChannelsData(const crsf_header_t *message);
+    EspNowSlaveLink link;
 #else
-    void sendRCFrame();
+    EspNowMasterLink link;
 #endif
-    
-    CRSFParser crsfParser;
-    bool isInitialized = false;
-    std::array<uint8_t, 64 - 3 + 6> inBuffer;
-    std::array<uint8_t, 64 - 3 + 6> outBuffer;
-    uint32_t mConnectCounter = 0;
-    uint32_t mMenuCounter = 0;
-    uint32_t mChSendCount = 0;
-    uint32_t mChRecvCount = 0;
+    EspNowRadio radio;
+    EspNowEvents events;
+    EspNowProtocol::Uid uid{};
+    EspNowProtocol::Mac mac{};
+    std::array<EspNowProtocol::Mac, EspNowProtocol::MaxSlaves> knownPeers{};
+    volatile State state = State::Stopped;
+    uint32_t lastStartAttempt = 0;
+    uint32_t lastErrorReport = 0;
+    uint32_t reportedErrors = 0;
+
+    bool running() const
+    {
+        return state == State::Ready;
+    }
+    void processQueuedEvents();
+    void waitForBinding();
+    bool uidChanged() const;
+    void applyUidChange();
+    void tick();
+    void reportErrors();
+
+    // Role specific, implemented in rx_espnow_master.cpp or rx_espnow_slave.cpp.
+    void prepareTick();
+    void deliver(EspNowProtocol::Frame &frame);
+    void updateConnection(const uint32_t now);
+    void updatePeers();
 };
+
+extern EspNowConnector espNow;
+extern device_t ESPNOW_device;
 #endif

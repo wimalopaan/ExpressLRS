@@ -11,14 +11,10 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 
-#if defined(WMESPNOW_SLAVE)
-extern DummyRadio Radio;
-#else
 #if defined(RADIO_SX127X)
 extern SX127xDriver Radio;
 #elif defined(RADIO_SX128X)
 extern SX1280Driver Radio;
-#endif
 #endif
 
 WiFiUDP *WifiJoystick::udp = NULL;

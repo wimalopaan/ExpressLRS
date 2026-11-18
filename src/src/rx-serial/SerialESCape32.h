@@ -5,17 +5,7 @@
 #include "SerialIO.h"
 #include "common.h"
 #include "esp_crc.h"
-
-#ifdef __cpp_lib_span
-# include <span>
-#else 
-namespace std {
-    struct span {
-        uint8_t* data;
-        size_t length;
-    };
-}
-#endif
+#include "Span.h"
 
 extern volatile bool reconfigureSerials;
 
@@ -90,12 +80,12 @@ class SerialESCape32 : public SerialIO {
             }
             return *this;
         }
-        ESCape32Buffer& operator+=(const std::span& sp) {
-            (*this) += (sp.length / 4 - 1);
-            for(size_t i = 0; i < sp.length; ++i) {
-                push(sp.data[i]);
+        ESCape32Buffer& operator+=(Span<const uint8_t> sp) {
+            (*this) += (sp.size() / 4 - 1);
+            for(size_t i = 0; i < sp.size(); ++i) {
+                push(sp[i]);
             }
-            const uint32_t crc = esp_crc32_le(0, &sp.data[0], sp.length);
+            const uint32_t crc = esp_crc32_le(0, sp.data(), sp.size());
             for(uint8_t i = 0; i < sizeof(crc); ++i) {
                 push(((uint8_t*)&crc)[i]);
             }
