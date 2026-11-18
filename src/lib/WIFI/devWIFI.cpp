@@ -27,6 +27,7 @@
 #include <ESPAsyncWebServer.h>
 
 #include "common.h"
+#include "RxRadioMode.h"
 #include "rxtx_intf.h"
 #include "POWERMGNT.h"
 #include "FHSS.h"
@@ -42,9 +43,14 @@
 #if defined(TARGET_RX) && defined(PLATFORM_ESP32)
 #include "devVTXSPI.h"
 #endif
+
 #if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
 #include "../../src/rx-serial/SerialESCape32.h"
 #endif
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
+#include "../../src/rx_espnow.h"
+#endif
+
 #include "WebContent.h"
 
 #include "config.h"
@@ -110,7 +116,9 @@ static const char VERSION[] = {LATEST_VERSION, 0};
 
 void setWifiUpdateMode()
 {
-    DBGLN("setWifiUpdateMode");
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
+  espNow.stop();
+#endif
   // No need to ExitBindingMode(), the radio will be stopped stopped when start the Wifi service.
   // Need to change this before the mode change event so the LED is updated
   InBindingMode = false;
@@ -426,6 +434,11 @@ static void GetGpsStatus(AsyncWebServerRequest *request)
 static void GetConfiguration(AsyncWebServerRequest *request)
 {
   const bool exportMode = request->hasArg("export");
+  if (exportMode && rxRadioMode == RxRadioMode::Invalid)
+  {
+    request->send(409, "text/plain", "RF hardware is incompletely configured; correct the hardware layout and reboot");
+    return;
+  }
   auto *response = new AsyncJsonResponse();
   const auto json = response->getRoot();
 
@@ -917,7 +930,6 @@ static void WebUpdateHandleNotFound(AsyncWebServerRequest *request)
 }
 
 static void corsPreflightResponse(AsyncWebServerRequest *request) {
-  DBGLN("corsPreflightResponse");
   AsyncWebServerResponse *response = request->beginResponse(204, "text/plain");
   request->send(response);
 }
@@ -1263,12 +1275,15 @@ static void startWiFi(unsigned long now)
 #endif
 
     // Set transmit power to minimum
-    POWERMGNT::setPower(MinPower);
+    if (isRadioEnabled())
+      POWERMGNT::setPower(MinPower);
 
     setWifiUpdateMode();
 
-    DBGLN("Stopping Radio");
-    Radio.End();
+    if (isRadioEnabled()) {
+      DBGLN("Stopping Radio");
+      Radio.End();
+    }
   }
 
   DBGLN("Begin Webupdater");
@@ -1425,7 +1440,8 @@ static void startServices()
   server.on("/update", HTTP_OPTIONS, corsPreflightResponse);
   server.on("/forceupdate", WebUploadForceUpdateHandler);
   server.on("/forceupdate", HTTP_OPTIONS, corsPreflightResponse);
-  server.on("/cw", HandleContinuousWave);
+  if (isRadioEnabled())
+    server.on("/cw", HandleContinuousWave);
 
 #if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
   server.on("/ESCape32Upload", HTTP_POST, ESCape32UploadResponseHandler, ESCape32UploadDataHandler);
@@ -1461,8 +1477,10 @@ static void startServices()
   #endif
 
   #if defined(RADIO_LR1121)
-    server.on("/lr1121", HTTP_OPTIONS, corsPreflightResponse);
-    addLR1121Handlers(server);
+    if (isRadioEnabled()) {
+      server.on("/lr1121", HTTP_OPTIONS, corsPreflightResponse);
+      addLR1121Handlers(server);
+    }
   #endif
 
   #if defined(TARGET_RX)

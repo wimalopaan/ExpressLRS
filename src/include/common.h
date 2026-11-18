@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #ifndef UNIT_TEST
 #include "targets.h"
 #include "device.h"

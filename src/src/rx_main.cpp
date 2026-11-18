@@ -46,6 +46,10 @@ namespace std {
 std::array<ESCape32Status, 2> escape32_status{};
 std::array<SerialEventFlags, 2> serial_events{};
 #endif
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
+#include "rx_espnow.h"
+#endif
+#include "RxRadioMode.h"
 
 #include "devAnalogVbat.h"
 #include "devBaro.h"
@@ -97,6 +101,9 @@ std::array<SerialEventFlags, 2> serial_events{};
 ///////////////////
 
 device_affinity_t ui_devices[] = {
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
+  {&ESPNOW_device, 1},
+#endif
   {&Serial0_device, 1},
 #if defined(PLATFORM_ESP32)
   {&Serial1_device, 1},
@@ -131,6 +138,9 @@ RxConfig config;
 CRSFRouter crsfRouter;
 RXEndpoint crsfReceiver;
 RXOTAConnector otaConnector;
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
+EspNowConnector espNow;
+#endif
 
 bool crsfBatterySensorDetected = false;
 bool crsfBaroSensorDetected = false;
@@ -242,6 +252,8 @@ void reconfigureSerial();
 
 uint8_t getLq()
 {
+    if (!isRadioEnabled())
+        return connectionState == connected ? 100 : 0;
     return LQCalc.getLQ();
 }
 
@@ -1763,6 +1775,9 @@ static void setupRadio()
 {
     ChannelDataReset();
 
+    if (!isRadioEnabled())
+        return;
+
     Radio.currFreq = FHSSgetInitialFreq();
 #if defined(RADIO_SX127X)
     //Radio.currSyncWord = UID[3];
@@ -1998,6 +2013,13 @@ void EnterBindingModeSafely()
     if (connectionState == serialUpdate || InBindingMode)
         return;
 
+    if (!isRadioEnabled())
+    {
+        DBGLN("RF binding unavailable; configure the ESP-NOW UID via Wi-Fi");
+        setWifiUpdateMode();
+        return;
+    }
+
     // Never enter wifi mode after requesting to enter binding mode
     webserverPreventAutoStart = true;
 
@@ -2125,6 +2147,12 @@ static void updateSwitchMode()
 
 static void CheckConfigChangePending()
 {
+    if (!isRadioEnabled())
+    {
+        if (config.IsModified() && connectionState < NO_CONFIG_SAVE_STATES)
+            devicesTriggerEvent(config.Commit());
+        return;
+    }
     if (config.IsModified() && !InBindingMode && connectionState < NO_CONFIG_SAVE_STATES)
     {
         LostConnection(false);
@@ -2169,7 +2197,11 @@ void resetConfigAndReboot()
 
 void setup()
 {
-    if (!options_init())
+    bool hardwareReady = options_init();
+#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
+    hardwareReady = hardwareReady && EspNowConnector::selectRadioMode();
+#endif
+    if (!hardwareReady)
     {
         // In the failure case we set the logging to the null logger so nothing crashes
         // if it decides to log something
@@ -2223,9 +2255,12 @@ void setup()
             }
         }
         crsfRouter.addEndpoint(&crsfReceiver);
-
-        crsfRouter.addConnector(&otaConnector);
-        
+        if (isRadioEnabled())
+            crsfRouter.addConnector(&otaConnector);
+#if defined(WMEXTENSION) && defined(TARGET_RX) && defined(WMESPNOW)
+        if (EspNowConnector::enabled())
+            crsfRouter.addConnector(&espNow);
+#endif
         setupSerial();
         setupSerial1();
 #if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3) && defined(TARGET_RX)
@@ -2241,8 +2276,7 @@ void setup()
 
         setupRadio();
 
-        
-        if (connectionState != radioFailed)
+        if (isRadioEnabled() && connectionState != radioFailed)
         {
             // RFnoiseFloor = MeasureNoiseFloor(); //TODO move MeasureNoiseFloor to driver libs
             // DBGLN("RF noise floor: %d dBm", RFnoiseFloor);
@@ -2261,7 +2295,6 @@ void setup()
     // setup() eats up some of this time, which can cause the first mode connection to fail.
     // Resetting the time here give the first mode a better chance of connection.
     RFmodeLastCycled = millis();
-
 }
 
 #if defined(PLATFORM_ESP32_C3)
@@ -2324,8 +2357,8 @@ void loop()
     {
         return;
     }
-    
-    
+    if (!isRadioEnabled())
+        return;
 
     if ((connectionState != disconnected) && (ExpressLRS_currAirRate_Modparams->index != ExpressLRS_nextAirRateIndex)) // forced change
     {

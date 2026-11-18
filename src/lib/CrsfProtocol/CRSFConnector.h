@@ -29,6 +29,7 @@ public:
      * @param device_id The CRSF address of the device to add.
      */
     void addDevice(crsf_addr_e device_id);
+    void removeDevice(crsf_addr_e device_id);
 
     /**
      * @brief Checks whether the connector is responsible for forwarding messages

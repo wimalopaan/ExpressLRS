@@ -120,7 +120,6 @@ device_affinity_t ui_devices[] = {
   {&VTX_device, 0}
 };
 
-
 static bool diversityAntennaState = LOW;
 
 static bool inGeminiMode()
@@ -1510,7 +1509,6 @@ void loop()
 
   HandleUARTin();
 
-  
   if (connectionState > MODE_STATES)
   {
     return;

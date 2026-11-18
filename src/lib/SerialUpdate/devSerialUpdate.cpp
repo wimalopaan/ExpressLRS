@@ -7,6 +7,7 @@
 #include "POWERMGNT.h"
 #include "devVTXSPI.h"
 #include "devMSPVTX.h"
+#include "RxRadioMode.h"
 
 extern void start_esp_upload();
 extern void stub_handle_rx_byte(char byte);
@@ -27,6 +28,8 @@ static int event()
         hwTimer::stop();
         disableVTxSpi();
         disableMspVtx();
+        if (!isRadioEnabled())
+            return DURATION_IMMEDIATELY;
         POWERMGNT::setPower(MinPower);
         Radio.End();
         return DURATION_IMMEDIATELY;

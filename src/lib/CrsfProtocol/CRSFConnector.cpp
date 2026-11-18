@@ -14,6 +14,11 @@ bool CRSFConnector::forwardsTo(const crsf_addr_e device_id)
     return devices.find(device_id) != devices.end();
 }
 
+void CRSFConnector::removeDevice(const crsf_addr_e device_id)
+{
+    devices.erase(device_id);
+}
+
 void CRSFConnector::debugCRSF(const char *str, const crsf_header_t *message)
 {
 #if defined(DEBUG_LOG)
