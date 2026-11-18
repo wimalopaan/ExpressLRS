@@ -5,6 +5,7 @@
 #include "options.h"
 #include "common.h"
 #include "OTA.h"
+#include <type_traits>
 
 #if defined(PLATFORM_ESP32)
 #include <nvs_flash.h>
@@ -122,6 +123,18 @@ typedef struct {
     tx_button_color_t buttonColors[2];  // FUTURE: TX RGB color / mode (sets color of TX, can be a static color or standard)
                                         // FUTURE: Model RGB color / mode (sets LED color mode on the model, but can be second TX led color too)
                                         // FUTURE: Custom button actions
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+    struct analog_calibration_t {
+        struct chan_calib {
+            uint16_t min = 0;
+            uint16_t mid = 1024;
+            uint16_t max = 2048;
+        };
+        uint16_t vbat;
+        chan_calib channels[MAX_ADC_CHANNELS];
+    };
+    analog_calibration_t calibration;
+#endif
 } tx_config_t;
 
 class TxConfig : public BindphraseConfigurable
@@ -160,6 +173,20 @@ public:
     uint8_t GetPTRStartChannel() const { return m_model->ptrStartChannel; }
     uint8_t GetPTREnableChannel() const { return m_model->ptrEnableChannel; }
 
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+    const tx_config_t::analog_calibration_t::chan_calib& GetCalibration(const uint8_t ch) const { return m_config.calibration.channels[ch]; }
+    void SetCalibration(const uint8_t ch, const tx_config_t::analog_calibration_t::chan_calib& calib, const bool setModified = true) { 
+        m_config.calibration.channels[ch] = calib; 
+        if (setModified) {
+            m_modified |= EVENT_CONFIG_CALIBRATION_CHANGED;
+        }
+    }
+    void SetVBatCalib(const uint16_t v) {m_config.calibration.vbat = v; m_modified |= EVENT_CONFIG_CALIBRATION_CHANGED;}
+    uint16_t GetVBatCalib() const {return m_config.calibration.vbat;}
+    void event(const uint32_t e) {
+        m_modified |= e;        
+    }
+#endif
     // Setters
     void SetRate(uint8_t rate);
     void SetTlm(uint8_t tlm);
@@ -223,6 +250,42 @@ typedef enum : uint8_t {
     BINDSTORAGE_ADMINISTERED = 3,
 } rx_config_bindstorage_t;
 
+#if defined(WMEXTENSION)
+// 5-bit field stored master-compatible: bits 0-3 at the stock position, bit 4 in the stock 'unused' bits.
+// Keeps the stock layout (no RX_CONFIG_VERSION change) and the .val.inputChannel/.val.mode syntax.
+template<unsigned LoPos, unsigned HiPos>
+struct rx_config_pwm_split5_t {
+    uint32_t raw;
+    operator uint32_t() const { return ((raw >> LoPos) & 0x0fU) | (((raw >> HiPos) & 1U) << 4); }
+    template<typename E, typename = typename std::enable_if<std::is_enum<E>::value>::type>
+    explicit operator E() const { return E(uint32_t(*this)); }
+    rx_config_pwm_split5_t& operator=(const uint32_t v) {
+        raw = (raw & ~((0x0fU << LoPos) | (1U << HiPos))) | ((v & 0x0fU) << LoPos) | (((v >> 4) & 1U) << HiPos);
+        return *this;
+    }
+    rx_config_pwm_split5_t& operator+=(const uint32_t v) { return *this = uint32_t(*this) + v; }
+};
+
+typedef union {
+    union {
+        struct {
+            uint32_t failsafe:11,       // us output during failsafe +476 (e.g. 1024 here would be 1500us)
+                     inputChannelLo:4,  // use inputChannel
+                     inverted:1,        // invert channel output
+                     modeLo:4,          // use mode
+                     stretched:1,       // expand the channel input to 500us - 2500us
+                     narrow:1,          // Narrow output mode (half pulse width)
+                     failsafeMode:2,    // failsafe output mode (eServoOutputFailsafeMode)
+                     inputChannelHi:1,  // use inputChannel
+                     modeHi:1,          // use mode
+                     unused:6;
+        };
+        rx_config_pwm_split5_t<11, 24> inputChannel; // 0-based input channel
+        rx_config_pwm_split5_t<16, 25> mode;         // Output mode (eServoOutputMode)
+    } val;
+    uint32_t raw;
+} rx_config_pwm_t;
+#else
 typedef union {
     struct {
         uint32_t failsafe:11,    // us output during failsafe +476 (e.g. 1024 here would be 1500us)
@@ -236,13 +299,19 @@ typedef union {
     } val;
     uint32_t raw;
 } rx_config_pwm_t;
+#endif
+static_assert(sizeof(rx_config_pwm_t) == sizeof(uint32_t), "rx_config_pwm_t must stay 32 bit");
 
 typedef struct __attribute__((packed)) {
     uint32_t    version;
     uint8_t     uid[UID_LEN];
     uint8_t     unused_padding;
     uint8_t     serial1Protocol:4,  // secondary serial protocol
+    #if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+                serial2Protocol:4;
+    #else
                 serial1Protocol_unused:4;
+    #endif
     uint32_t    flash_discriminator;
     struct __attribute__((packed)) {
         uint16_t    scale;          // FUTURE: Override compiled vbat scale
@@ -296,6 +365,9 @@ public:
 #if defined(PLATFORM_ESP32)
     eSerial1Protocol GetSerial1Protocol() const { return (eSerial1Protocol)m_config.serial1Protocol; }
 #endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    eSerial2Protocol GetSerial2Protocol() const { return (eSerial2Protocol)m_config.serial2Protocol; }
+#endif
     uint8_t GetTeamraceChannel() const { return m_config.teamraceChannel; }
     uint8_t GetTeamracePosition() const { return m_config.teamracePosition; }
     eFailsafeMode GetFailsafeMode() const { return (eFailsafeMode)m_config.failsafeMode; }
@@ -319,8 +391,16 @@ public:
     void SetRateInitialIdx(uint8_t rateInitialIdx);
     void SetSerialProtocol(eSerialProtocol serialProtocol);
 #if defined(PLATFORM_ESP32)
+# if defined(WMEXTENSION)
+    void SetSerial1Protocol(eSerial1Protocol serial1Protocol, bool event = true);
+# else
     void SetSerial1Protocol(eSerial1Protocol serial1Protocol);
+# endif
 #endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    void SetSerial2Protocol(eSerial2Protocol serial2Protocol, bool event = true);
+#endif
+    
     void SetTeamraceChannel(uint8_t teamraceChannel);
     void SetTeamracePosition(uint8_t teamracePosition);
     void SetFailsafeMode(eFailsafeMode failsafeMode);

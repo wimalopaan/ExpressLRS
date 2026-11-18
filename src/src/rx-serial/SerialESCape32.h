@@ -1,0 +1,266 @@
+#pragma once
+
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+
+#include "SerialIO.h"
+#include "common.h"
+#include "esp_crc.h"
+#include <atomic>
+#include <mutex>
+
+#ifdef __cpp_lib_span
+# include <span>
+#else 
+namespace std {
+    struct span {
+        uint8_t* data;
+        size_t length;
+    };
+}
+#endif
+
+extern volatile bool reconfigureSerials;
+
+struct ESCape32Status {
+    ESCape32Status() {
+        clear();
+    }
+    void clear() {
+        firmware = "---";
+        bootloader = "---";
+        target = "---";
+        actual = "---";
+        update = "---";
+        input = "---";
+        telem = "---";
+        id = "---";
+    }
+    String firmware;
+    String bootloader;
+    String target;
+    String actual;
+    String update;
+    String input;
+    String telem;
+    String id;
+    // Guards the strings: written by the serial device (core 1), read by the web server (core 0).
+    std::mutex mutex;
+    std::atomic<bool> attached{false};
+    std::atomic<bool> flashing{false};
+};
+
+enum class SerialEvent : uint8_t {
+    None            = 0,
+    WriteFirmware   = 1 << 0,
+    WriteBootloader = 1 << 1
+};
+
+using SerialEventFlags = std::atomic<uint8_t>;
+
+void serialEvent(SerialEvent e);
+// True while an attached ESCape32 port has a pending or running write.
+bool escape32Busy();
+
+class SerialESCape32 : public SerialIO {
+    static constexpr auto ESCAPE32_CALLBACK_INTERVAL_MS = 50; // must be suffcient to read whole response
+    static constexpr auto PreIdleWait_MS = 2500;
+    static constexpr auto PreIdleWaitCount = PreIdleWait_MS / ESCAPE32_CALLBACK_INTERVAL_MS;
+    static constexpr uint8_t CMD_PROBE  = 0;
+    static constexpr uint8_t CMD_INFO   = 1;
+    static constexpr uint8_t CMD_READ   = 2;
+    static constexpr uint8_t CMD_WRITE  = 3;
+    static constexpr uint8_t CMD_UPDATE = 4;
+    static constexpr uint8_t CMD_SETWRP = 5;
+    
+    template<size_t Size = (1024 + 32)>
+    struct ESCape32Buffer {
+        void clear() {
+            mIndex = 0;
+        }
+        size_t length() const {
+            return mIndex;
+        }
+        const uint8_t* data() const {
+            return &mData[0];
+        }
+        ESCape32Buffer& operator+=(const uint8_t v) {
+            push(v);
+            push(~v);
+            return *this;
+        }
+        template<size_t L>
+        ESCape32Buffer& operator+=(const std::array<uint8_t, L>& data) {
+            (*this) += (L / 4 - 1);
+            for(const auto& d: data) {
+                push(d);
+            }
+            const uint32_t crc = esp_crc32_le(0, &data[0], L);
+            for(uint8_t i = 0; i < sizeof(crc); ++i) {
+                push(((uint8_t*)&crc)[i]);
+            }
+            return *this;
+        }
+        ESCape32Buffer& operator+=(const std::span& sp) {
+            (*this) += (sp.length / 4 - 1);
+            for(size_t i = 0; i < sp.length; ++i) {
+                push(sp.data[i]);
+            }
+            const uint32_t crc = esp_crc32_le(0, &sp.data[0], sp.length);
+            for(uint8_t i = 0; i < sizeof(crc); ++i) {
+                push(((uint8_t*)&crc)[i]);
+            }
+            return *this;
+        }
+    private:
+        void push(const uint8_t v) {
+            if (mIndex < Size) {
+                mData[mIndex++] = v;
+            }
+        }
+        size_t mIndex{};
+        std::array<uint8_t, Size> mData{};
+    };    
+    enum class State : uint8_t {
+        Start,
+        Idle,
+        Probe,
+        Info,
+        Read,
+        SetCrsfInputMode,
+        SetCrsfInputModeCheck,
+        SetCrsfTelemMode,
+        SetCrsfTelemModeCheck,
+        SetCrsfTelemID,
+        SetCrsfTelemIDCheck,
+        ResetWriteProtection,
+        ResetWriteProtectionCheck,
+        WriteBootloader,
+        WriteBootloaderCheck,
+        EraseSignature,
+        EraseSignatureCheck,
+        WriteFirmware,
+        WriteFirmwareCheck,
+        WriteSignature,
+        WriteSignatureCheck,
+        SetWriteProtection,
+        SetWriteProtectionCheck,
+        AsciiPreIdle,
+        AsciiPreIdleWait,
+        AsciiInfo,
+        AsciiInfoCkeck,
+        AsciiGetInputMode,
+        AsciiGetInputModeCheck,
+        AsciiGetTelemMode,
+        AsciiGetTelemModeCheck,
+        AsciiGetTelemID,
+        AsciiGetTelemIDCheck,
+        AsciiSave,
+        AsciiSaveCheck
+    };
+    struct Parser {
+        inline explicit Parser(ESCape32Status& status) : escape32_status{status} {
+        }
+        inline ~Parser() {
+            std::lock_guard<std::mutex> lock{escape32_status.mutex};
+            escape32_status.clear();
+        }
+        struct BootLoaderInfo {
+            uint8_t mRevision{};
+            uint8_t mPin{};
+            uint32_t mMcu{};
+        };
+        struct FirmwareInfo {
+            uint8_t mRevision{};
+            uint8_t mPatch{};
+            std::array<char, 16> mTarget{};            
+        };
+        struct ConfigInfo {
+            uint8_t mInputMode{};
+            uint8_t mTelemMode{};
+            uint8_t mTelemID{};
+        };
+        enum class State : uint8_t {Idle, Probe, Info, Read, 
+                                    EraseWriteFirmware, WriteBootloader, 
+                                    Ascii,
+                                    Ok, Error};
+        void process(const uint8_t b);
+        void set(const State s);
+        explicit operator bool() const;
+        const FirmwareInfo& fwinfo() const {
+            return mFWInfo;
+        }
+        ESCape32Status& escape32_status;
+    private:
+        void probe();
+        void writeOK();
+        void info();
+        void read();
+        void parseAsciiOk();
+        void parseAsciiModes();
+        uint8_t valueAt(uint8_t index);
+        bool checkData(uint16_t payloadLength);
+        State mState = State::Idle;
+        uint8_t mIndex{};
+        std::array<uint8_t, 64> mData{};
+        BootLoaderInfo mBLInfo;
+        FirmwareInfo mFWInfo;
+        ConfigInfo mCfgInfo;
+    };
+public:
+    explicit SerialESCape32(Stream &out, Stream &in, ESCape32Status& status, SerialEventFlags& event, uint8_t telem_id);
+    ~SerialESCape32() override;
+    uint32_t sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t *channelData) override;
+protected:
+    void processBytes(uint8_t *bytes, uint16_t size) override;
+private:
+    void send();
+    void send(const String&);
+    
+    void getInputSetting();
+    void getTelemSetting();
+    void getTelemID();
+    void asciiInfo();
+    
+    void setCrsfInputMode();
+    void setCrsfTelemMode();
+    void setCrsfTelemID();
+    
+    void save();
+    
+    void probe();
+    void info();
+    void read();
+    
+    void setWriteProtection(uint8_t);
+    
+    void sendBootloader();
+    
+    void eraseSignature();
+    void sendFirmware();
+    
+    bool checkTarget();
+    bool consumeEvent(SerialEvent e, uint8_t& consumed) const;
+    static bool isWriting(State s);
+    
+    State mState = State::Start;
+    uint16_t mStateCounter = 0;
+    bool mChangeInputTelemMode = false;
+    
+    bool mSkipFirstReceivedByte = false;
+    Parser mParser;
+    ESCape32Buffer<>* mBuffer = nullptr;
+    SerialEventFlags& mEvent;
+    uint8_t mTelemID;
+    
+    uint8_t mGoodCounter = 0;
+    struct MultiBlockState {
+        void reset() {
+            mNumber = 0;
+            mPosition = 0;
+        }
+        uint16_t mNumber{};
+        uint32_t mPosition{};
+    };
+    MultiBlockState mMultiBlockState;
+};
+#endif

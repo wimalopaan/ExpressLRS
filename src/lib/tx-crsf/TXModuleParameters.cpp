@@ -13,6 +13,14 @@
 #include "msptypes.h"
 
 #define STR_LUA_ALLAUX         "AUX1;AUX2;AUX3;AUX4;AUX5;AUX6;AUX7;AUX8;AUX9;AUX10;AUX11;AUX12"
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+#include "devADC.h"
+extern void setAnalogDeadband(uint16_t);
+extern void setAnalogFilter(uint16_t);
+extern void setGaugeMin(uint16_t);
+extern void setGaugeMax(uint16_t);
+extern void setGaugeScale(uint16_t);
+#endif
 
 #define STR_LUA_ALLAUX_UPDOWN  "AUX1" LUASYM_ARROW_UP ";AUX1" LUASYM_ARROW_DN ";AUX2" LUASYM_ARROW_UP ";AUX2" LUASYM_ARROW_DN \
                                ";AUX3" LUASYM_ARROW_UP ";AUX3" LUASYM_ARROW_DN ";AUX4" LUASYM_ARROW_UP ";AUX4" LUASYM_ARROW_DN \
@@ -69,7 +77,11 @@ static constexpr char tlmRatios[] = "Std;Off;1:128;1:64;1:32;1:16;1:8;1:4;1:2;Ra
 static constexpr char tlmRatiosMav[] = ";;;;;;;;1:2;";
 static constexpr char switchmodeOpts4ch[] = "Wide;Hybrid";
 static constexpr char switchmodeOpts4chMav[] = ";Hybrid";
+#if defined(WMEXTENSION) && defined(WMCRSF_CHAN_EXT)
+static constexpr char switchmodeOpts8ch[] = "8ch;32ch Rate/4;12ch Mixed";
+#else
 static constexpr char switchmodeOpts8ch[] = "8ch;16ch Rate/2;12ch Mixed";
+#endif
 static constexpr char switchmodeOpts8chMav[] = ";16ch Rate/2;";
 static constexpr char antennamodeOpts[] = "Gemini;Ant 1;Ant 2;Switch";
 static constexpr char antennamodeOptsDualBand[] = "Gemini;;;";
@@ -179,6 +191,42 @@ static commandParameter luaBind = {
     lcsIdle, // step
     STR_EMPTYSPACE
 };
+
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+static folderParameter luaAnalogFolder = {
+    {"Analog Inputs / Gauge", CRSF_FOLDER}
+};
+static commandParameter luaStartCalibration = {
+    {"Start calibration", CRSF_COMMAND},
+    lcsIdle, // step
+    STR_EMPTYSPACE
+};
+static int8Parameter luaAnalogDeadband = {
+    {"Analog Deadband", CRSF_UINT8},
+    5, 1, 100,
+    STR_EMPTYSPACE
+};
+static int8Parameter luaAnalogFilter = {
+    {"Analog Filter", CRSF_UINT8},
+    90, 1, 100,
+    "centi"
+};
+static int8Parameter luaGaugeMin = {
+    {"Gauge min", CRSF_UINT8},
+    64, 60, 74,
+    "dV"
+};
+static int8Parameter luaGaugeMax = {
+    {"Gauge max", CRSF_UINT8},
+    75, 75, 84,
+    "dV"
+};
+static int8Parameter luaGaugeScale = {
+    {"Gauge scale", CRSF_UINT8},
+    30, 1, 250,
+    STR_EMPTYSPACE
+};
+#endif
 
 static stringParameter luaELRSversion = {
     {version_domain, CRSF_INFO},
@@ -392,7 +440,11 @@ void TXModuleEndpoint::sendELRSstatus(const crsf_addr_e origin)
   // to support sending a params.msg, buffer should be extended by the strlen of the message
   // and copied into params->msg (with trailing null)
   strcpy(params->msg, warningInfo);
+#if defined(WMEXTENSION) && defined(WMRELAY)
+  crsfRouter.SetExtendedHeaderAndCrc((crsf_ext_header_t *)buffer, CRSF_FRAMETYPE_ELRS_STATUS, CRSF_EXT_FRAME_SIZE(payloadSize), origin, CRSF_ADDRESS_CRSF_REPEATER_TRANSMITTER);
+#else
   crsfRouter.SetExtendedHeaderAndCrc((crsf_ext_header_t *)buffer, CRSF_FRAMETYPE_ELRS_STATUS, CRSF_EXT_FRAME_SIZE(payloadSize), origin, CRSF_ADDRESS_CRSF_TRANSMITTER);
+#endif
   crsfRouter.processMessage(nullptr, (crsf_header_t *)buffer);
 }
 
@@ -983,6 +1035,56 @@ void TXModuleEndpoint::registerParameters()
     registerParameter(&luaBind, sendCallback);
   }
 
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+  registerParameter(&luaAnalogFolder);
+  registerParameter(&luaStartCalibration, [&](propertiesCommon* const item, const uint8_t arg) {
+        commandParameter* const cmd = (commandParameter *)item;
+        const commandStep_e step = (commandStep_e)arg;
+        switch(step) {
+        case lcsClick:
+            sendCommandResponse(cmd, lcsAskConfirm, "Start calibration?");
+            break;
+        case lcsConfirmed:
+            sendCommandResponse(cmd, lcsExecuting, "Move sources");
+            startInputCalibration();
+            break;
+        case lcsCancel:
+            sendCommandResponse(cmd, lcsIdle, STR_EMPTYSPACE);
+            break;
+        case lcsQuery:
+            if (isInputCalbrationRunning()) {
+                sendCommandResponse(cmd, lcsExecuting, "Move sources");                
+            }
+            else {
+                sendCommandResponse(cmd, lcsIdle, "Finished calibrating");                                
+            }
+            break;
+        default:
+            break;
+        }
+  }, luaAnalogFolder.common.id);
+  registerParameter(&luaAnalogDeadband, [this](propertiesCommon *item, uint16_t arg) {
+      luaAnalogDeadband.properties.u.value = arg;
+      setAnalogDeadband(arg);
+    }, luaAnalogFolder.common.id);
+  registerParameter(&luaAnalogFilter, [this](propertiesCommon *item, uint16_t arg) {
+      luaAnalogFilter.properties.u.value = arg;
+      setAnalogFilter(arg);
+    }, luaAnalogFolder.common.id);
+  registerParameter(&luaGaugeMin, [this](propertiesCommon *item, uint16_t arg) {
+      luaGaugeMin.properties.u.value = arg;
+      setGaugeMin(arg * 100);
+    }, luaAnalogFolder.common.id);
+  registerParameter(&luaGaugeMax, [this](propertiesCommon *item, uint16_t arg) {
+      luaGaugeMax.properties.u.value = arg;
+      setGaugeMax(arg * 100);
+    }, luaAnalogFolder.common.id);
+  registerParameter(&luaGaugeScale, [this](propertiesCommon *item, uint16_t arg) {
+      luaGaugeScale.properties.u.value = arg;
+      setGaugeScale(arg * 4);
+    }, luaAnalogFolder.common.id);
+#endif
+  
   registerParameter(&luaELRSversion);
 }
 

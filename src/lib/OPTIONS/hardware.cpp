@@ -13,6 +13,23 @@ typedef enum {
     COUNT
 } datatype_t;
 
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+#define HARDWARE_SERIAL2_FIELDS(X) \
+    X(HARDWARE_serial2_rx, "serial2_rx", INT) \
+    X(HARDWARE_serial2_tx, "serial2_tx", INT)
+#else
+#define HARDWARE_SERIAL2_FIELDS(X)
+#endif
+
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+#define HARDWARE_RXTX_ANALOG_FIELDS(X) \
+    X(HARDWARE_adc_inputs, "adc_inputs", ARRAY) \
+    X(HARDWARE_adc_inputs_count, "adc_inputs", COUNT) \
+    X(HARDWARE_gauge_pwm, "gauge_pwm", INT)
+#else
+#define HARDWARE_RXTX_ANALOG_FIELDS(X)
+#endif
+
 // Every JSON key the hardware layout understands. The strings and the
 // table itself live in flash (PROGMEM) because they are only walked at
 // boot and when a layout is uploaded; on ESP8266 a plain const would
@@ -23,6 +40,7 @@ typedef enum {
     X(HARDWARE_serial_tx, "serial_tx", INT) \
     X(HARDWARE_serial1_rx, "serial1_rx", INT) \
     X(HARDWARE_serial1_tx, "serial1_tx", INT) \
+    HARDWARE_SERIAL2_FIELDS(X) \
     X(HARDWARE_radio_busy, "radio_busy", INT) \
     X(HARDWARE_radio_busy_2, "radio_busy_2", INT) \
     X(HARDWARE_radio_dio0, "radio_dio0", INT) \
@@ -117,6 +135,7 @@ typedef enum {
     X(HARDWARE_misc_fan_speeds_count, "misc_fan_speeds", COUNT) \
     X(HARDWARE_gsensor_stk8xxx, "gsensor_stk8xxx", BOOL) \
     X(HARDWARE_thermal_lm75a, "thermal_lm75a", BOOL) \
+    HARDWARE_RXTX_ANALOG_FIELDS(X) \
     X(HARDWARE_pwm_outputs, "pwm_outputs", ARRAY) \
     X(HARDWARE_pwm_outputs_count, "pwm_outputs", COUNT) \
     X(HARDWARE_pwm_out_only, "pwm_out_only", BOOL) \

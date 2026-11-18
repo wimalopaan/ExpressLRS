@@ -11,6 +11,12 @@
 #if defined(PLATFORM_ESP32)
 #include <driver/periph_ctrl.h>
 #endif
+#if defined(WMEXTENSION) && defined(TARGET_RX)
+#include "../../src/rx_wmextension.h"
+#include "RXEndpoint.h"
+static bool mswState[PWM_MAX_CHANNELS];
+extern RXEndpoint crsfReceiver;
+#endif
 
 static int8_t servoPins[PWM_MAX_CHANNELS];
 static pwm_channel_t pwmChannels[PWM_MAX_CHANNELS];
@@ -102,6 +108,10 @@ static void servoWriteDshot(eServoOutputMode chMode, uint8_t ch, uint16_t us)
 #endif /* PLATFORM_ESP32 */
 }
 
+#if defined(WMEXTENSION) && defined(TARGET_RX)
+static bool servoWriteFailsafe = false; // set while servosFailsafe() writes the outputs
+#endif
+
 static void servoWrite(uint8_t ch, uint16_t us)
 {
     const rx_config_pwm_t *chConfig = config.GetPwmChannel(ch);
@@ -110,6 +120,41 @@ static void servoWrite(uint8_t ch, uint16_t us)
     {
         servoWriteDshot(chMode, ch, us);
     }
+#if defined(WMEXTENSION) && defined(TARGET_RX)
+    else {
+        // in failsafe the failsafe value wins over the MultiSwitch state
+        const bool useMsw = !servoWriteFailsafe && crsfReceiver.multiSwitch().hasData();
+        const bool pwmChanged = (pwmChannelValues[ch] != us); 
+        const bool mswChanged = useMsw && (mswState[ch] != crsfReceiver.multiSwitch().state(ch));
+        const bool changed = pwmChanged || mswChanged;
+        if (servoPins[ch] != UNDEF_PIN && changed)
+        {
+            pwmChannelValues[ch] = us;
+            mswState[ch] = crsfReceiver.multiSwitch().state(ch);
+            if (chMode == somOnOff)
+            {
+                if (useMsw) {
+                    const bool swState = crsfReceiver.multiSwitch().state(ch);
+                    digitalWrite(servoPins[ch], swState);
+                }
+                else {
+                    digitalWrite(servoPins[ch], us > 1500);
+                    if (servoWriteFailsafe) {
+                        pwmChannelValues[ch] = UINT16_MAX; // force rewrite of the MultiSwitch state after failsafe
+                    }
+                }
+            }
+            else if (chMode == som10KHzDuty)
+            {
+                PWM.setDuty(pwmChannels[ch], constrain(us, 1000, 2000) - 1000);
+            }
+            else
+            {
+                PWM.setMicroseconds(pwmChannels[ch], us / (chConfig->val.narrow + 1));
+            }
+        }
+    }
+    #else
     else if (servoPins[ch] != UNDEF_PIN && pwmChannelValues[ch] != us)
     {
         pwmChannelValues[ch] = us;
@@ -126,10 +171,14 @@ static void servoWrite(uint8_t ch, uint16_t us)
             PWM.setMicroseconds(pwmChannels[ch], us);
         }
     }
+    #endif
 }
 
 static void servosFailsafe()
 {
+#if defined(WMEXTENSION) && defined(TARGET_RX)
+    servoWriteFailsafe = true;
+#endif
     for (int ch = 0 ; ch < GPIO_PIN_PWM_OUTPUTS_COUNT ; ++ch)
     {
         const rx_config_pwm_t *chConfig = config.GetPwmChannel(ch);
@@ -147,6 +196,9 @@ static void servosFailsafe()
             // do nothing
         }
     }
+#if defined(WMEXTENSION) && defined(TARGET_RX)
+    servoWriteFailsafe = false;
+#endif
 }
 
 static void servosEnterFailsafe()

@@ -54,6 +54,11 @@ void CRSFHandset::Begin()
     addDevice(CRSF_ADDRESS_RADIO_TRANSMITTER);
     crsfRouter.addConnector(this);
 
+#if defined(WMEXTENSION) && defined(TARGET_TX) && defined(WMRELAY)
+    DBGLN("add address mapper");
+    setAddressMapper(new CRSFAddressMapper());
+#endif    
+    
     UARTwdtLastChecked = millis() + UARTwdtInterval; // allows a delay before the first time the UARTwdt() function is called
 
     halfDuplex = (GPIO_PIN_RCSIGNAL_TX == GPIO_PIN_RCSIGNAL_RX);
@@ -115,7 +120,21 @@ void CRSFHandset::forwardMessage(const crsf_header_t *message)
             ERRLN("too large");
             return;
         }
-
+#if defined(WMEXTENSION) && defined(TARGET_TX) && defined(WMRELAY)
+        // the router passes the same message to all connectors, so map the addresses on a copy
+        uint8_t mapped[CRSF_MAX_PACKET_LEN];
+        if (m_address_mapper && message->type >= CRSF_FRAMETYPE_DEVICE_PING) {
+            memcpy(mapped, message, size);
+            auto* const ext = (crsf_ext_header_t *)mapped;
+            if (ext->type == CRSF_FRAMETYPE_DEVICE_INFO) {
+                DBGLN("forward map: dev info from: %u, to %u", ext->orig_addr, ext->dest_addr);
+            }
+            ext->dest_addr = m_address_mapper->mapOutgoingAddress(ext->dest_addr);
+            ext->orig_addr = m_address_mapper->mapOutgoingAddress(ext->orig_addr);
+            mapped[size - 1] = crsfRouter.crsf_crc.calc((uint8_t *)&ext->type, size - 3);
+            message = (const crsf_header_t *)mapped;
+        }
+#endif
         SerialOutFIFO.lock();
         if (SerialOutFIFO.ensure(size + 1))
         {
@@ -209,6 +228,20 @@ bool CRSFHandset::ProcessPacket()
         if (connected) connected();
     }
 
+#if defined(WMEXTENSION) && defined(TARGET_TX) && defined(WMRELAY)
+    if (inBuffer[2] >= CRSF_FRAMETYPE_DEVICE_PING) {
+        DBGLN("got ext package");
+        if (m_address_mapper) {
+            auto *ext = (crsf_ext_header_t *)&inBuffer;
+            ext->dest_addr = m_address_mapper->mapIncomingAddress(ext->dest_addr);
+            ext->orig_addr = m_address_mapper->mapIncomingAddress(ext->orig_addr);
+            
+            uint8_t totalLen = inBuffer[1] + CRSF_FRAME_NOT_COUNTED_BYTES;
+            inBuffer[totalLen - 1] = crsfRouter.crsf_crc.calc(&inBuffer[2], totalLen - 3);                
+        }
+    }
+#endif
+    
     crsfRouter.processMessage(this, (crsf_header_t *)&inBuffer);
 
     return true;
@@ -561,8 +594,10 @@ bool CRSFHandset::UARTwdt()
             if (controllerConnected)
             {
                 DBGLN("CRSF UART Disconnected");
-                if (disconnected) disconnected();
-                controllerConnected = false;
+#if (!(defined(WMEXTENSION) && defined(WMRXTX_ANALOG)))
+                        if (disconnected) disconnected();
+                        controllerConnected = false;
+#endif
             }
 
             UARTrequestedBaud = autobaud();
@@ -596,8 +631,13 @@ bool CRSFHandset::UARTwdt()
             UARTwdtLastChecked -= 3 * (UARTwdtInterval >> 2);
         }
 
+#if defined(WMEXTENSION) && defined(WMCRSF_CHAN_EXT)
+        GoodPktsCountResult = GoodPktsCount / 2; // we receive 2 channel packets from handset
+        BadPktsCountResult = BadPktsCount / 2;
+#else
         GoodPktsCountResult = GoodPktsCount;
         BadPktsCountResult = BadPktsCount;
+#endif
         BadPktsCount = 0;
         GoodPktsCount = 0;
     }

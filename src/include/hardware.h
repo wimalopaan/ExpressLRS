@@ -8,7 +8,11 @@ typedef enum {
     HARDWARE_serial_tx,
     HARDWARE_serial1_rx,
     HARDWARE_serial1_tx,
-
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    HARDWARE_serial2_rx,
+    HARDWARE_serial2_tx,
+#endif
+    
     // Radio
     HARDWARE_radio_busy,
     HARDWARE_radio_busy_2,
@@ -126,6 +130,12 @@ typedef enum {
     HARDWARE_gsensor_stk8xxx,
     HARDWARE_thermal_lm75a,
 
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+    HARDWARE_adc_inputs,
+    HARDWARE_adc_inputs_count,
+    HARDWARE_gauge_pwm,
+#endif
+    
     // PWM
     HARDWARE_pwm_outputs,
     HARDWARE_pwm_outputs_count,

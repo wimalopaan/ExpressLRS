@@ -29,6 +29,24 @@
 #include "rx-serial/SerialDisplayport.h"
 #include "rx-serial/SerialGPS.h"
 
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32)
+# include "rx-serial/SerialESCape32.h"
+# include "hal/gpio_hal.h"
+# include <utility>
+# if !defined(__cpp_lib_exchange_function)
+namespace std {
+    template<class T, class U = T>
+    T exchange(T& obj, U&& new_value) {
+        T old_value = std::move(obj);
+        obj = std::forward<U>(new_value);
+        return old_value;
+    }
+}
+# endif
+std::array<ESCape32Status, 2> escape32_status{};
+std::array<SerialEventFlags, 2> serial_events{};
+#endif
+
 #include "devAnalogVbat.h"
 #include "devBaro.h"
 #include "devButton.h"
@@ -49,6 +67,10 @@
 #include "devMSPVTX.h"
 #include "devThermal.h"
 #include "esp_task_wdt.h"
+#endif
+
+#if defined(WMEXTENSION)
+#include "rx_wmextension.h"
 #endif
 
 //
@@ -80,6 +102,9 @@ device_affinity_t ui_devices[] = {
   {&Serial1_device, 1},
   {&SerialUpdate_device, 1},
 #endif
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+  {&Serial2_device, 1},
+#endif    
   {&LED_device, 0},
   {&RXLUA_device, 0},
   {&RGB_device, 0},
@@ -128,6 +153,12 @@ uint32_t serialBaud;
 #endif
 
 SerialIO *serialIO = nullptr;
+
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+SerialIO *serial2IO = nullptr;
+#define SERIAL2_PROTOCOL_TX Serial2
+#define SERIAL2_PROTOCOL_RX Serial2
+#endif
 
 #define SERIAL_PROTOCOL_RX Serial
 #define SERIAL1_PROTOCOL_RX Serial1
@@ -1379,7 +1410,11 @@ static void setupSerial()
     }
     else if (sumdSerialOutput)
     {
+#if defined(WMEXTENSION)
+        serialIO = new SerialSUMD3(SERIAL_PROTOCOL_TX, SERIAL_PROTOCOL_RX);
+#else 
         serialIO = new SerialSUMD(SERIAL_PROTOCOL_TX, SERIAL_PROTOCOL_RX);
+#endif
     }
     else if (mavlinkSerialOutput)
     {
@@ -1431,6 +1466,19 @@ static void serial1Shutdown()
     }
 }
 
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+static void  addPullupOpenDrain(const uint8_t pin) {
+    static constexpr gpio_hal_context_t _gpio_hal = {
+        .dev = GPIO_HAL_GET_HW(GPIO_PORT_0)
+    };
+    gpio_hal_od_enable(&_gpio_hal, (gpio_num_t)pin);
+    gpio_pullup_en((gpio_num_t)pin);
+    // pinMode(serial1TXpin, INPUT | OUTPUT | OPEN_DRAIN | PULLUP);
+    // pinMode(serial1TXpin, OPEN_DRAIN | PULLUP);
+    // pinMode(serial1TXpin, OUTPUT_OPEN_DRAIN);
+}
+#endif
+
 static void setupSerial1()
 {
     //
@@ -1458,6 +1506,8 @@ static void setupSerial1()
         }
     }
 
+    DBGLN("setupSerial1: p: %u, tx: %u", config.GetSerial1Protocol(), serial1TXpin);
+    
     switch(config.GetSerial1Protocol())
     {
         case PROTOCOL_SERIAL1_OFF:
@@ -1481,7 +1531,11 @@ static void setupSerial1()
             break;
         case PROTOCOL_SERIAL1_SUMD:
             Serial1.begin(115200, SERIAL_8N1, UNDEF_PIN, serial1TXpin, false);
+#if defined(WMEXTENSION)
+            serial1IO = new SerialSUMD3(SERIAL1_PROTOCOL_TX, SERIAL1_PROTOCOL_RX);
+#else
             serial1IO = new SerialSUMD(SERIAL1_PROTOCOL_TX, SERIAL1_PROTOCOL_RX);
+#endif
             break;
         case PROTOCOL_SERIAL1_HOTT_TLM:
             Serial1.begin(19200, SERIAL_8N2, serial1RXpin, serial1TXpin, false);
@@ -1512,6 +1566,14 @@ static void setupSerial1()
             Serial1.begin(38400, SERIAL_8N1, serial1RXpin, serial1TXpin, false);
             serial1IO = new SerialScorpion_TLM(SERIAL1_PROTOCOL_TX, SERIAL1_PROTOCOL_RX);
             break;
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+        case PROTOCOL_SERIAL1_ESCAPE32:
+            Serial1.begin(38400, SERIAL_8N1, serial1TXpin, serial1TXpin, false);
+            Serial1.setMode(UART_MODE_RS485_HALF_DUPLEX);
+            addPullupOpenDrain(serial1TXpin);
+            serial1IO = new SerialESCape32(SERIAL1_PROTOCOL_TX, SERIAL1_PROTOCOL_RX, escape32_status[0], serial_events[0], 1);
+            break;
+#endif
     }
 }
 
@@ -1521,8 +1583,109 @@ void reconfigureSerial1()
     setupSerial1();
 }
 #else
-    void setupSerial1() {};
-    void reconfigureSerial1() {};
+void setupSerial1() {};
+void reconfigureSerial1() {};
+#endif
+
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3) && defined(TARGET_RX)
+static void serial2Shutdown()
+{
+    if(serial2IO != nullptr)
+    {
+        Serial2.end();
+        delete serial2IO;
+        serial2IO = nullptr;
+    }
+}
+static void setupSerial2() {
+    int8_t serial2RXpin = GPIO_PIN_SERIAL2_RX;
+    
+    if (serial2RXpin == UNDEF_PIN)
+    {
+        for (uint8_t ch = 0; ch < GPIO_PIN_PWM_OUTPUTS_COUNT; ch++)
+        {
+            if (config.GetPwmChannel(ch)->val.mode == somSerial2RX)
+                serial2RXpin = GPIO_PIN_PWM_OUTPUTS[ch];
+        }
+    }
+    
+    int8_t serial2TXpin = GPIO_PIN_SERIAL2_TX;
+    
+    if (serial2TXpin == UNDEF_PIN)
+    {
+        for (uint8_t ch = 0; ch < GPIO_PIN_PWM_OUTPUTS_COUNT; ch++)
+        {
+            if (config.GetPwmChannel(ch)->val.mode == somSerial2TX)
+                serial2TXpin = GPIO_PIN_PWM_OUTPUTS[ch];
+        }
+    }
+    
+    DBGLN("setupSerial2: p: %u, tx: %u", config.GetSerial2Protocol(), serial2TXpin);
+    
+    if ((serial2TXpin == UNDEF_PIN) || (serial2RXpin == UNDEF_PIN)) {
+        return;
+    }
+    
+    switch(config.GetSerial2Protocol())
+    {
+    case PROTOCOL_SERIAL2_OFF:
+        break;
+    case PROTOCOL_SERIAL2_CRSF:
+        Serial2.begin(firmwareOptions.uart_baud, SERIAL_8N1, serial2RXpin, serial2TXpin, false);
+        serial2IO = new SerialCRSF(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        break;
+    case PROTOCOL_SERIAL2_INVERTED_CRSF:
+        Serial2.begin(firmwareOptions.uart_baud, SERIAL_8N1, serial2RXpin, serial2TXpin, true);
+        serial2IO = new SerialCRSF(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        break;
+    case PROTOCOL_SERIAL2_SBUS:
+    case PROTOCOL_SERIAL2_DJI_RS_PRO:
+        Serial2.begin(100000, SERIAL_8E2, UNDEF_PIN, serial2TXpin, true);
+        serial2IO = new SerialSBUS(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        break;
+    case PROTOCOL_SERIAL2_INVERTED_SBUS:
+        Serial2.begin(100000, SERIAL_8E2, UNDEF_PIN, serial2TXpin, false);
+        serial2IO = new SerialSBUS(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        break;
+    case PROTOCOL_SERIAL2_SUMD:
+        Serial2.begin(115200, SERIAL_8N1, UNDEF_PIN, serial2TXpin, false);
+        serial2IO = new SerialSUMD3(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        break;
+    case PROTOCOL_SERIAL2_HOTT_TLM:
+        Serial2.begin(19200, SERIAL_8N2, serial2RXpin, serial2TXpin, false);
+        serial2IO = new SerialHoTT_TLM(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX, serial2TXpin);
+        break;
+    case PROTOCOL_SERIAL2_TRAMP:
+        Serial2.begin(9600, SERIAL_8N1, UNDEF_PIN, serial2TXpin, false);
+        serial2IO = new SerialTramp(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX, serial2TXpin);
+        break;
+    case PROTOCOL_SERIAL2_SMARTAUDIO:
+        Serial2.begin(4800, SERIAL_8N2, UNDEF_PIN, serial2TXpin, false);
+        serial2IO = new SerialSmartAudio(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX, serial2TXpin);
+        break;
+    case PROTOCOL_SERIAL2_MSP_DISPLAYPORT:
+        Serial2.begin(115200, SERIAL_8N1, UNDEF_PIN, serial2TXpin, false);
+        serial2IO = new SerialDisplayport(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        break;
+    case PROTOCOL_SERIAL2_GPS:
+        Serial2.begin(115200, SERIAL_8N1, serial2RXpin, serial2TXpin, false);
+        serial2IO = new SerialGPS(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX);
+        break;
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    case PROTOCOL_SERIAL2_ESCAPE32:
+        Serial2.begin(38400, SERIAL_8N1, serial2TXpin, serial2TXpin, false);
+        Serial2.setMode(UART_MODE_RS485_HALF_DUPLEX);
+        addPullupOpenDrain(serial2TXpin);
+        serial2IO = new SerialESCape32(SERIAL2_PROTOCOL_TX, SERIAL2_PROTOCOL_RX, escape32_status[1], serial_events[1], 2);
+        break;
+#endif
+    }
+}    
+void reconfigureSerial2()
+{
+    serial2Shutdown();
+    setupSerial2();
+}
 #endif
 
 static void serialShutdown()
@@ -2060,9 +2223,14 @@ void setup()
             }
         }
         crsfRouter.addEndpoint(&crsfReceiver);
+
         crsfRouter.addConnector(&otaConnector);
+        
         setupSerial();
         setupSerial1();
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3) && defined(TARGET_RX)
+        setupSerial2();
+#endif        
 
         devicesRegister(ui_devices, ARRAY_SIZE(ui_devices));
         devicesInit();
@@ -2073,6 +2241,7 @@ void setup()
 
         setupRadio();
 
+        
         if (connectionState != radioFailed)
         {
             // RFnoiseFloor = MeasureNoiseFloor(); //TODO move MeasureNoiseFloor to driver libs
@@ -2092,6 +2261,7 @@ void setup()
     // setup() eats up some of this time, which can cause the first mode connection to fail.
     // Resetting the time here give the first mode a better chance of connection.
     RFmodeLastCycled = millis();
+
 }
 
 #if defined(PLATFORM_ESP32_C3)
@@ -2117,10 +2287,45 @@ void loop()
     CheckConfigChangePending();
     executeDeferredFunction(micros());
 
+    // The following isn't possible, because sending and receiving 
+    // on Serial1 and simultaneously on Serial2 isn't possible.
+    // The receiving UART dors not receive bytes von the other is sending.
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+# if defined(WMESCAPE32_USE_SIMULTANEOUSLY)
+    if (connectionState == wifiUpdate) {
+        if (std::exchange(reconfigureSerials, false)) {
+            DBGLN("reconfigureSerials");
+            bool needEvent = false;
+            if (config.GetSerial1Protocol() != PROTOCOL_SERIAL1_ESCAPE32) {
+                if (config.GetSerial1Protocol() == PROTOCOL_SERIAL1_CRSF) {
+                    config.SetSerial1Protocol(PROTOCOL_SERIAL1_ESCAPE32, false); // temporary change
+                    reconfigureSerial1();
+                    needEvent = true;
+                }
+            }
+#  if defined(WMSERIAL2)
+            if (config.GetSerial2Protocol() != PROTOCOL_SERIAL2_ESCAPE32) {
+                if (config.GetSerial2Protocol() == PROTOCOL_SERIAL2_CRSF) {
+                    config.SetSerial2Protocol(PROTOCOL_SERIAL2_ESCAPE32, false); // temporary change
+                    reconfigureSerial2();
+                    needEvent = true;
+                }
+            }
+#  endif
+            if (needEvent) {
+                devicesTriggerEvent(EVENT_RUNTIME_RECONFIGURE_SERIAL);                
+            }
+        }
+    }
+# endif
+#endif
+    
     if (connectionState > MODE_STATES)
     {
         return;
     }
+    
+    
 
     if ((connectionState != disconnected) && (ExpressLRS_currAirRate_Modparams->index != ExpressLRS_nextAirRateIndex)) // forced change
     {

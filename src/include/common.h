@@ -21,6 +21,8 @@
 #include "SX12xxDriverCommon.h"
 #endif // UNIT_TEST
 
+#include <array>
+
 typedef enum : uint8_t
 {
     TLM_RATIO_STD = 0,   // Use suggested ratio from ModParams
@@ -207,6 +209,10 @@ enum eServoOutputMode : uint8_t
     somPwm,         // 13: true PWM mode (NOT SUPPORTED)
     somSerial1RX,   // 14: secondary Serial RX
     somSerial1TX,   // 15: secondary Serial TX
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32)
+    somSerial2RX,   
+    somSerial2TX,   
+#endif
 };
 
 enum eServoOutputFailsafeMode : uint8_t
@@ -248,7 +254,31 @@ enum eSerial1Protocol : uint8_t
     PROTOCOL_SERIAL1_SMARTAUDIO,
     PROTOCOL_SERIAL1_MSP_DISPLAYPORT,
     PROTOCOL_SERIAL1_GPS,
-    PROTOCOL_SERIAL1_SCORPION_TLM
+    PROTOCOL_SERIAL1_SCORPION_TLM,
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+    PROTOCOL_SERIAL1_ESCAPE32,
+#endif
+};
+#endif
+
+#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+enum eSerial2Protocol : uint8_t
+{
+    PROTOCOL_SERIAL2_OFF,
+    PROTOCOL_SERIAL2_CRSF,
+    PROTOCOL_SERIAL2_INVERTED_CRSF,
+    PROTOCOL_SERIAL2_SBUS,
+    PROTOCOL_SERIAL2_INVERTED_SBUS,
+	PROTOCOL_SERIAL2_SUMD,
+    PROTOCOL_SERIAL2_DJI_RS_PRO,
+    PROTOCOL_SERIAL2_HOTT_TLM,
+    PROTOCOL_SERIAL2_TRAMP,
+    PROTOCOL_SERIAL2_SMARTAUDIO,
+    PROTOCOL_SERIAL2_MSP_DISPLAYPORT,
+    PROTOCOL_SERIAL2_GPS,
+#if defined(WMESCAPE32)
+    PROTOCOL_SERIAL2_ESCAPE32,
+#endif
 };
 #endif
 
@@ -276,7 +306,13 @@ enum eAuxChannels : uint8_t
     CRSF_NUM_CHANNELS = 16
 };
 
+#if defined(WMEXTENSION)
+# define CRSF_EXTRA_CHANNELS 16
+# define MAX_ADC_CHANNELS 16
+#endif
+
 #ifndef UNIT_TEST
+
 #if defined(RADIO_SX127X)
 #define RATE_MAX 6
 #define RATE_BINDING RATE_LORA_900_50HZ
@@ -321,7 +357,29 @@ extern bool InBindingMode;
 extern uint8_t ExpressLRS_currTlmDenom;
 extern expresslrs_mod_settings_s *ExpressLRS_currAirRate_Modparams;
 extern expresslrs_rf_pref_params_s *ExpressLRS_currAirRate_RFperfParams;
-extern uint32_t ChannelData[CRSF_NUM_CHANNELS]; // Current state of channels, CRSF format
+
+#if defined(WMEXTENSION)
+struct FirmwareBuffer {
+    static constexpr size_t MaxSize = 64 * 1024;
+    inline explicit FirmwareBuffer(const size_t size) : size{size}{
+        data = new uint8_t[size];
+    }
+    ~FirmwareBuffer() {
+        delete[] data;
+    }
+    FirmwareBuffer(const FirmwareBuffer&) = delete;
+    FirmwareBuffer& operator=(const FirmwareBuffer&) = delete;
+    const size_t size = 0;
+    std::array<char, 64> name{};
+    uint8_t* data = nullptr;
+    uint32_t length{};
+    bool isBootloader = false;
+};
+extern uint32_t ChannelData[CRSF_NUM_CHANNELS + CRSF_EXTRA_CHANNELS];
+extern FirmwareBuffer* firmwareBuffer;
+#else
+extern uint32_t ChannelData[CRSF_NUM_CHANNELS];
+#endif
 
 extern connectionState_e connectionState;
 #if !defined(UNIT_TEST)
