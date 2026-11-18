@@ -46,9 +46,6 @@ namespace std {
 std::array<ESCape32Status, 2> escape32_status{};
 std::array<SerialEventFlags, 2> serial_events{};
 #endif
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
-#include "rx_espnow.h"
-#endif
 
 #include "devAnalogVbat.h"
 #include "devBaro.h"
@@ -112,9 +109,6 @@ device_affinity_t ui_devices[] = {
   {&RXLUA_device, 0},
   {&RGB_device, 0},
   {&WIFI_device, 0},
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
-  {&ESPNOWSender_device, 0},
-#endif
   {&Button_device, 0},
   {&AnalogVbat_device, 0},
   {&ServoOut_device, 1},
@@ -137,9 +131,6 @@ RxConfig config;
 CRSFRouter crsfRouter;
 RXEndpoint crsfReceiver;
 RXOTAConnector otaConnector;
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
-EspNowMaster espNow;
-#endif
 
 bool crsfBatterySensorDetected = false;
 bool crsfBaroSensorDetected = false;
@@ -249,17 +240,10 @@ bool BindingModeRequest = false;
 extern void setWifiUpdateMode();
 void reconfigureSerial();
 
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX) && defined(WMESPNOW_RECV)
-uint8_t getLq()
-{
-    return 100;
-}
-#else
 uint8_t getLq()
 {
     return LQCalc.getLQ();
 }
-#endif
 
 bool getGpsTelemetry(gps_telemetry_t &out)
 {
@@ -2240,14 +2224,7 @@ void setup()
         }
         crsfRouter.addEndpoint(&crsfReceiver);
 
-#if defined(WMEXTENSION) && defined(TARGET_RX) && defined(WMESPNOW)
-# if !defined(WMESPNOW_RECV)
         crsfRouter.addConnector(&otaConnector);
-# endif
-        crsfRouter.addConnector(&espNow);
-#else 
-        crsfRouter.addConnector(&otaConnector);
-#endif
         
         setupSerial();
         setupSerial1();
@@ -2264,9 +2241,6 @@ void setup()
 
         setupRadio();
 
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
-        espNow.start();
-#endif        
         
         if (connectionState != radioFailed)
         {
@@ -2288,9 +2262,6 @@ void setup()
     // Resetting the time here give the first mode a better chance of connection.
     RFmodeLastCycled = millis();
 
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(WMESPNOW_RECV) && defined(TARGET_RX)
-    hwTimer::resume();
-#endif        
 }
 
 #if defined(PLATFORM_ESP32_C3)
@@ -2354,9 +2325,6 @@ void loop()
         return;
     }
     
-#if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX) && defined(WMESPNOW_RECV)
-    return;
-#endif
     
 
     if ((connectionState != disconnected) && (ExpressLRS_currAirRate_Modparams->index != ExpressLRS_nextAirRateIndex)) // forced change

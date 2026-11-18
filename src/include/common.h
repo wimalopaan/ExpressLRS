@@ -313,16 +313,6 @@ enum eAuxChannels : uint8_t
 
 #ifndef UNIT_TEST
 
-#if defined(WMESPNOW_RECV) || defined(WMESPNOW_SERIAL_NO_RADIO)
-# include "../src/common_dummyradio.h"
-#define RATE_MAX 1
-#define RATE_BINDING RATE_LORA_2G4_50HZ
-#define RATE_DUALBAND_BINDING RATE_LORA_2G4_50HZ
-
-extern DummyRadio Radio;
-
-#else 
-
 #if defined(RADIO_SX127X)
 #define RATE_MAX 6
 #define RATE_BINDING RATE_LORA_900_50HZ
@@ -350,7 +340,6 @@ extern LR1121Driver Radio;
 extern LR2021Driver Radio;
 
 #endif
-#endif // Dummy radio
 #endif // UNIT_TEST
 
 expresslrs_mod_settings_s *get_elrs_airRateConfig(uint8_t index);

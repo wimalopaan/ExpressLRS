@@ -120,61 +120,6 @@ device_affinity_t ui_devices[] = {
   {&VTX_device, 0}
 };
 
-#if defined(WMEXTENSION) && defined(WMESPNOW_SERIAL_NO_RADIO) && defined(PLATFORM_ESP32_C3)
-static void sendUSBHandsetTiming(){
-    if (TxUSB == nullptr){
-        return;
-    }
-    const uint32_t now = millis();
-    static uint32_t usbTimingLastSentMs = 0;
-    
-    // Same 200 ms interval used by CRSFHandset.
-    if ((now - usbTimingLastSentMs) < 1000) {
-        return;
-    }
-    usbTimingLastSentMs = now;
-
-    DBGLN("sendUSBTiming");
-    
-    const uint32_t packetIntervalUs = 10000;
-    const int32_t timingOffset = 30030;
-
-    /*
-     * CRSF 0x3A / 0x10:
-     *
-     *   device address: 0xEA
-     *   frame type:     0x3A
-     *   destination:    0xEA
-     *   origin:         0xEE
-     *   subtype:        0x10
-     *   rate:           packet period in 0.1 us
-     *   offset:         timing correction in 0.1 us
-     */
-    CRSF_MK_EXT_FRAME_T(crsf_sync_packet_t) syncPacket = {
-        .h = {
-            CRSF_ADDRESS_RADIO_TRANSMITTER,
-            CRSF_EXT_FRAME_SIZE(sizeof(crsf_sync_packet_t)),
-            CRSF_FRAMETYPE_HANDSET,
-            CRSF_ADDRESS_RADIO_TRANSMITTER,
-            CRSF_ADDRESS_CRSF_TRANSMITTER,
-        },
-        .p = {
-            .subType = CRSF_HANDSET_SUBCMD_TIMING,
-            .rate = htobe32(packetIntervalUs * 10),
-            .offset = htobe32((uint32_t)timingOffset)
-        },
-        .crc = 0
-    };
-
-    syncPacket.crc = crsfRouter.crsf_crc.calc(
-        (uint8_t *)&syncPacket + CRSF_TELEMETRY_TYPE_INDEX,
-        sizeof(syncPacket) - 3);
-
-    TxUSB->write(
-        (uint8_t *)&syncPacket,
-        sizeof(syncPacket));
-}
-#endif
 
 static bool diversityAntennaState = LOW;
 
@@ -1188,18 +1133,7 @@ static void HandleUARTin()
     }
     else
     {
-#if defined(WMEXTENSION) && defined(WMESPNOW_SERIAL_NO_RADIO) && defined(PLATFORM_ESP32_C3)
-        crsfParser.processBytes(&usbConnector, buf, size, [](const crsf_header_t* message){
-            if (message->type == CRSF_FRAMETYPE_RC_CHANNELS_PACKED) {
-                UARTconnected();
-            }
-            else if (message->type == CRSF_FRAMETYPE_DEVICE_PING) {
-                DBGLN("USB read PING");                
-            }
-        });
-#else
       crsfParser.processBytes(&usbConnector, buf, size);
-#endif
     }
   }
 
@@ -1298,11 +1232,7 @@ static void setupSerial()
   BackpackOrLogStrm = serialPort;
 
 // Setup TxUSB
-#if defined(WMEXTENSION) && defined(WMESPNOW_SERIAL_NO_RADIO) && defined(PLATFORM_ESP32_C3)
-  USBSerial.begin(firmwareOptions.uart_baud);
-  USBSerial.setTimeout(0);
-  TxUSB = &USBSerial;
-#elif defined(PLATFORM_ESP32_S3)
+#if defined(PLATFORM_ESP32_S3)
   // Because we have ARDUINO_USB_MODE enabled, we use USBSerial as the USB device.
   USBSerial.begin(firmwareOptions.uart_baud);
   TxUSB = &USBSerial;
@@ -1580,9 +1510,6 @@ void loop()
 
   HandleUARTin();
 
-#if defined(WMEXTENSION) && defined(WMESPNOW_SERIAL_NO_RADIO) && defined(PLATFORM_ESP32_C3)
-  sendUSBHandsetTiming();
-#endif
   
   if (connectionState > MODE_STATES)
   {
