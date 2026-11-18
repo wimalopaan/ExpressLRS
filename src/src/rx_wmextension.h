@@ -10,7 +10,7 @@ struct MultiSwitch {
     using switches_t = std::array<uint8_t, 8>;
     using ledColor_t = std::array<uint32_t, 64>;
 
-    void decode(const uint8_t*);
+    void decode(const uint8_t* data, uint8_t len);
 
     const switches_t& switches() const;
     bool state(uint8_t) const;

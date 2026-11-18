@@ -101,16 +101,18 @@ void TXModuleEndpoint::handleMessage(const crsf_header_t *message)
     }
 }
 
-#if defined(WMEXTENSION) 
-// && defined(WMCRSF_CHAN_EXT)
+#if defined(WMEXTENSION) && defined(WMCRSF_CHAN_EXT)
 void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message, const uint8_t offset = 0) // data is packed as 11 bits per channel
 {
 #if defined(WMRXTX_ANALOG)
+    // rcPacketIndex: first used entry of localChannelData; rcPacketOffset: destination in ChannelData
     uint8_t rcPacketChannels = CRSF_NUM_CHANNELS;
+    uint8_t rcPacketIndex = 0;
     uint8_t rcPacketOffset = offset;
     if (offset < 16) {
         const uint8_t maxAdcChannels = std::min(MAX_ADC_CHANNELS, GPIO_PIN_ADC_INPUTS_COUNT);
-        rcPacketChannels -= maxAdcChannels;            
+        rcPacketChannels -= maxAdcChannels;
+        rcPacketIndex = maxAdcChannels;
         rcPacketOffset = maxAdcChannels;
     }
 #endif
@@ -141,11 +143,11 @@ void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message, cons
         bitsMerged -= srcBits;
     }
 
-#if defined(WMRXTX_ANALOG)
-    handset->PerformChannelOverrides(&localChannelData[rcPacketOffset], rcPacketChannels, rcPacketOffset);
-#else
-    handset->PerformChannelOverrides(localChannelData, CRSF_NUM_CHANNELS, offset);
-#endif
+    // like without WMCRSF_CHAN_EXT: overrides (e.g. headtracking) only see CH1-16, indexed from 0
+    if (offset == 0)
+    {
+        handset->PerformChannelOverrides(localChannelData, CRSF_NUM_CHANNELS, 0);
+    }
     //
     // sends channel data and also communicates commanded armed status in arming mode Switch.
     // frame len 24 -> arming mode CH5: use channel 5 value
@@ -157,35 +159,39 @@ void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message, cons
     //      1      |   x   | Arm using CH5, armed/not armed depending on CH5 value
     //
 
-    bool armCmd;
-    if (message->frame_size == CRSF_FRAME_SIZE(sizeof(crsf_channels_t)))
+    // only the base frame (CH1-16) carries the arming state; extended frames (offset 16) must not change it
+    if (offset == 0)
     {
-        armCmd = CRSF_to_BIT(localChannelData[AUX1]);       // no status byte present, us CH5 to arm
-    }
-    else
-    {
-        const uint8_t status = payload[readByteIndex];
-        if (status & CRSF_CHANNELS_STATUS_ARMING_MODE_CH5)
+        bool armCmd;
+        if (message->frame_size == CRSF_FRAME_SIZE(sizeof(crsf_channels_t)))
         {
-            armCmd = CRSF_to_BIT(localChannelData[AUX1]);   // status byte present and Arm using CH5 selected
+            armCmd = CRSF_to_BIT(localChannelData[AUX1]);       // no status byte present, us CH5 to arm
         }
         else
         {
-            armCmd = status & CRSF_CHANNELS_STATUS_ARMED;   // status byte present and Arm using Switch selected
+            const uint8_t status = payload[readByteIndex];
+            if (status & CRSF_CHANNELS_STATUS_ARMING_MODE_CH5)
+            {
+                armCmd = CRSF_to_BIT(localChannelData[AUX1]);   // status byte present and Arm using CH5 selected
+            }
+            else
+            {
+                armCmd = status & CRSF_CHANNELS_STATUS_ARMED;   // status byte present and Arm using Switch selected
+            }
+        }
+
+        // monitoring arming state
+        if (isArmed != armCmd)
+        {
+            isArmed = armCmd;
+#if defined(PLATFORM_ESP32)
+            devicesTriggerEvent(EVENT_ARM_FLAG_CHANGED);
+#endif
         }
     }
 
-    // monitoring arming state
-    if (isArmed != armCmd)
-    {
-        isArmed = armCmd;
-#if defined(PLATFORM_ESP32)
-        devicesTriggerEvent(EVENT_ARM_FLAG_CHANGED);
-#endif
-    }
-
 #if defined(WMRXTX_ANALOG)
-    handset->RCDataReceived(&localChannelData[rcPacketOffset], rcPacketChannels, rcPacketOffset);
+    handset->RCDataReceived(&localChannelData[rcPacketIndex], rcPacketChannels, rcPacketOffset);
 #else 
     handset->RCDataReceived(localChannelData, CRSF_NUM_CHANNELS, offset);
 #endif
@@ -259,6 +265,12 @@ void TXModuleEndpoint::RcPacketToChannelsData(const crsf_header_t *message) // d
 #endif
     }
 
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+    // the first ADC channels of ChannelData are owned by devADC
+    const uint8_t maxAdcChannels = std::min(MAX_ADC_CHANNELS, GPIO_PIN_ADC_INPUTS_COUNT);
+    handset->RCDataReceived(&localChannelData[maxAdcChannels], CRSF_NUM_CHANNELS - maxAdcChannels, maxAdcChannels);
+#else
     handset->RCDataReceived(localChannelData, CRSF_NUM_CHANNELS);
+#endif
 }
 #endif

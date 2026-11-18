@@ -61,7 +61,9 @@ void RXEndpoint::handleMessage(const crsf_header_t *message)
     }
 #if defined(WMEXTENSION) && defined(TARGET_RX)
     else if (message->type == CRSF_FRAMETYPE_COMMAND && ((extMessage->payload[0] == CRSF_COMMAND_SWITCH) || (extMessage->payload[0] == CRSF_COMMAND_CC))) {
-        msw.decode((const uint8_t*)(&extMessage->payload[0]));
+        // payload length without type, dest, orig and frame crc
+        const uint8_t payloadLen = (message->frame_size > 4) ? (message->frame_size - 4) : 0;
+        msw.decode((const uint8_t*)(&extMessage->payload[0]), payloadLen);
     }   
 #endif
 #if defined(PLATFORM_ESP32)

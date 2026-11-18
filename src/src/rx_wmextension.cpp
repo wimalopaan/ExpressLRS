@@ -2,6 +2,8 @@
 
 #include "rx_wmextension.h"
 
+#include <algorithm>
+
 #include "targets.h"
 #include "FIFO.h"
 #include "device.h"
@@ -49,8 +51,11 @@ void MultiSwitch::registerCallback(void (*cb)(const MultiSwitch*)) {
     DBGLN("MSW reg cb");
     mCb = cb;
 }
-void MultiSwitch::decode(const uint8_t* const data) {
+void MultiSwitch::decode(const uint8_t* const data, const uint8_t len) {
     DBGLN("MSW decode");
+    if (len < 2) {
+        return;
+    }
     const uint8_t realm = data[0]; // 5
     const uint8_t cmd = data[1]; // 6
     if (realm == CRSF_COMMAND_SWITCH) { 
@@ -59,7 +64,7 @@ void MultiSwitch::decode(const uint8_t* const data) {
             DBGLN("MSW Realm SW: CB");
             mCb(this);
         }
-        if (cmd == CRSF_SUBCMD_SWITCH_SET) { 
+        if ((cmd == CRSF_SUBCMD_SWITCH_SET) && (len >= 4)) {
             const uint8_t swAddress = data[2];
             const uint16_t sw = data[3];
             if ((swAddress >= minAddress) && (swAddress <= maxAddress)) {
@@ -97,7 +102,7 @@ void MultiSwitch::decode(const uint8_t* const data) {
                 }
             }
         }
-        else if (cmd == CRSF_SUBCMD_SWITCH_SET4) {
+        else if ((cmd == CRSF_SUBCMD_SWITCH_SET4) && (len >= 5)) {
             const uint8_t swAddress = data[2];
             const uint16_t sw = (data[3] << 8) + data[4];
             DBGLN("MSW Set4: adr: %d, v: %d", swAddress, sw);
@@ -140,8 +145,8 @@ void MultiSwitch::decode(const uint8_t* const data) {
                 }                
             }
         }
-        else if (cmd == CRSF_SUBCMD_SWITCH_SET4M) { 
-            const uint8_t count = data[2];
+        else if ((cmd == CRSF_SUBCMD_SWITCH_SET4M) && (len >= 3)) {
+            const uint8_t count = std::min<uint8_t>(data[2], (len - 3) / 3);
             bool gotData = false;
             for(uint8_t i = 0; i < count; ++i) {
                 const uint8_t swAddress = data[3 + 3 * i];
@@ -183,7 +188,7 @@ void MultiSwitch::decode(const uint8_t* const data) {
                 mCb(this);
             }                                
         }
-        else if (cmd == CRSF_SUBCMD_SWITCH_SET64) { // set64
+        else if ((cmd == CRSF_SUBCMD_SWITCH_SET64) && (len >= 6)) { // set64
             const uint8_t swAddress = data[2];
             const uint8_t swGroup = (data[3] & 0x07);
             const uint16_t swSwitches = (data[4] << 8) + data[5];
@@ -205,10 +210,10 @@ void MultiSwitch::decode(const uint8_t* const data) {
                 }                
             }
         }
-        else if (cmd == CRSF_SUBCMD_SWITCH_SETRGB) { // setRGB
+        else if ((cmd == CRSF_SUBCMD_SWITCH_SETRGB) && (len >= 4)) { // setRGB
             const uint8_t swAddress = data[2];
             const uint8_t count = data[3];
-            if ((swAddress >= minLedAddress) && (swAddress <= maxLedAddress) && (count <= 8)) {
+            if ((swAddress >= minLedAddress) && (swAddress <= maxLedAddress) && (count <= 8) && (len >= 4 + 2 * count)) {
                 mHasData = true;
                 const uint8_t swGroup = (swAddress - minLedAddress) & 0x07;;
                 for(uint8_t i = 0; i < count; ++i) {
@@ -228,14 +233,14 @@ void MultiSwitch::decode(const uint8_t* const data) {
     }
     else if (realm == CRSF_COMMAND_CC) { // cruise controller
         DBGLN("SUMDV3 Realm CC: cmd: %d", cmd);
-        if (cmd == CRSF_SUBCMD_CC_SETCHANNEL) { // 16 channels as 8-bit
+        if ((cmd == CRSF_SUBCMD_CC_SETCHANNEL) && (len >= 2 + CRSF_EXTRA_CHANNELS)) { // 16 channels as 8-bit
             mFlags = 0;
             for(uint8_t i = 0; i < CRSF_EXTRA_CHANNELS; ++i) {
                 const int8_t ch8bit = data[2 + i];
                 ChannelData[i + CRSF_NUM_CHANNELS] = (int32_t(ch8bit) * ((CRSF_CHANNEL_VALUE_STD_MAX - CRSF_CHANNEL_VALUE_STD_MIN) / 2)) / 127 + CRSF_CHANNEL_VALUE_MID; 
             }
         }
-        else if (cmd == CRSF_SUBCMD_CC_SETCHANNEL_EXT) { // flags, 16 channels as 8-bit
+        else if ((cmd == CRSF_SUBCMD_CC_SETCHANNEL_EXT) && (len >= 3 + CRSF_EXTRA_CHANNELS)) { // flags, 16 channels as 8-bit
             mFlags = data[2];
             for(uint8_t i = 0; i < CRSF_EXTRA_CHANNELS; ++i) {
                 const int8_t ch8bit = data[3 + i];

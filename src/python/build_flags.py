@@ -145,6 +145,60 @@ build_flags.append("-DLATEST_VERSION=" + get_version())
 build_flags.append("-DTARGET_NAME=" + re.sub("_VIA_.*", "", target_name))
 condense_flags()
 
+def wm_extensions_require_wmextension():
+    # all WM* sub-extensions are only active together with WMEXTENSION
+    global build_flags
+    if any(re.search(r"(^|\s)-D\s*WMEXTENSION(=\S*)?(\s|$)", x) for x in build_flags):
+        return
+    pattern = r"(^|\s)-D\s*WM\w+(=\S*)?(?=\s|$)"
+    removed = [m.group(0).strip() for x in build_flags for m in re.finditer(pattern, x)]
+    if removed:
+        print("WARNING: WMEXTENSION not defined, ignoring: " + " ".join(removed))
+        build_flags = [re.sub(pattern, "", x) for x in build_flags]
+        build_flags = [x for x in build_flags if (x.strip() != "")]
+
+wm_extensions_require_wmextension()
+
+def wm_extensions_disable_for_native():
+    # unit tests are written for the upstream behaviour
+    global build_flags
+    if target_name != "NATIVE":
+        return
+    pattern = r"(^|\s)-D\s*WM\w+(=\S*)?(?=\s|$)"
+    if any(re.search(pattern, x) for x in build_flags):
+        print("WARNING: WM extensions are disabled for native unit tests")
+        build_flags = [re.sub(pattern, "", x) for x in build_flags]
+        build_flags = [x for x in build_flags if (x.strip() != "")]
+
+wm_extensions_disable_for_native()
+
+def wm_tx_only_extensions():
+    # TX-only WM extensions are ignored for RX targets
+    global build_flags
+    if not any(re.search(r"(^|\s)-DTARGET_RX(=\S*)?(\s|$)", x) for x in build_flags):
+        return
+    pattern = r"(^|\s)-D\s*WMRXTX_ANALOG(=\S*)?(?=\s|$)"
+    if any(re.search(pattern, x) for x in build_flags):
+        print("WARNING: WMRXTX_ANALOG is TX only, ignoring for RX target")
+        build_flags = [re.sub(pattern, "", x) for x in build_flags]
+        build_flags = [x for x in build_flags if (x.strip() != "")]
+
+wm_tx_only_extensions()
+
+def wm_serial2_not_for_esp32c3():
+    # the ESP32-C3 has no free UART for Serial2
+    global build_flags
+    mcu = env.BoardConfig().get("build.mcu", "").lower() if "BOARD" in env else ""
+    if mcu != "esp32c3":
+        return
+    pattern = r"(^|\s)-D\s*WMSERIAL2(=\S*)?(?=\s|$)"
+    if any(re.search(pattern, x) for x in build_flags):
+        print("WARNING: WMSERIAL2 is not supported on ESP32-C3, ignoring")
+        build_flags = [re.sub(pattern, "", x) for x in build_flags]
+        build_flags = [x for x in build_flags if (x.strip() != "")]
+
+wm_serial2_not_for_esp32c3()
+
 if '-DRADIO_SX127X=1' in build_flags or '-DRADIO_LR1121=1' in build_flags or '-DRADIO_LR2021=1' in build_flags:
     # disallow setting 2400s for 900
     if '-DRADIO_SX127X=1' in build_flags and \

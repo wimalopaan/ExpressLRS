@@ -121,22 +121,18 @@ void CRSFHandset::forwardMessage(const crsf_header_t *message)
             return;
         }
 #if defined(WMEXTENSION) && defined(TARGET_TX) && defined(WMRELAY)
-        if (message->type >= CRSF_FRAMETYPE_DEVICE_PING) {
-            auto* const ext = (crsf_ext_header_t *)message;
-            if (m_address_mapper) {
-                if (ext->type == CRSF_FRAMETYPE_LINK_STATISTICS) {
-                    DBGLN("transform linkstats");
-                    ext->type = CRSF_FRAMETYPE_LINK_STATISTICS_REPEATER;
-                }
-                if (ext->type == CRSF_FRAMETYPE_DEVICE_INFO) {
-                    DBGLN("forward map: dev info from: %u, to %u", ext->orig_addr, ext->dest_addr);
-                }
-                ext->dest_addr = m_address_mapper->mapOutgoingAddress(ext->dest_addr);
-                ext->orig_addr = m_address_mapper->mapOutgoingAddress(ext->orig_addr);
-                
-                uint8_t totalLen = CRSF_FRAME_SIZE(message->frame_size);
-                ((uint8_t *)message)[totalLen - 1] = crsfRouter.crsf_crc.calc((uint8_t *)&ext->type, totalLen - 3);
+        // the router passes the same message to all connectors, so map the addresses on a copy
+        uint8_t mapped[CRSF_MAX_PACKET_LEN];
+        if (m_address_mapper && message->type >= CRSF_FRAMETYPE_DEVICE_PING) {
+            memcpy(mapped, message, size);
+            auto* const ext = (crsf_ext_header_t *)mapped;
+            if (ext->type == CRSF_FRAMETYPE_DEVICE_INFO) {
+                DBGLN("forward map: dev info from: %u, to %u", ext->orig_addr, ext->dest_addr);
             }
+            ext->dest_addr = m_address_mapper->mapOutgoingAddress(ext->dest_addr);
+            ext->orig_addr = m_address_mapper->mapOutgoingAddress(ext->orig_addr);
+            mapped[size - 1] = crsfRouter.crsf_crc.calc((uint8_t *)&ext->type, size - 3);
+            message = (const crsf_header_t *)mapped;
         }
 #endif
         SerialOutFIFO.lock();
@@ -191,7 +187,6 @@ void ICACHE_RAM_ATTR CRSFHandset::JustSentRFpacket()
 
 void CRSFHandset::sendSyncPacketToTX() // in values in us.
 {
-#if !(defined(WMEXTENSION) && defined(WMRXTX_ANALOG) && defined(WMRELAY))
     const uint32_t now = millis();
     if (now - OpenTXsyncLastSent >= OpenTXsyncPacketInterval)
     {
@@ -220,7 +215,6 @@ void CRSFHandset::sendSyncPacketToTX() // in values in us.
 
         OpenTXsyncLastSent = now;
     }
-#endif
 }
 
 bool CRSFHandset::ProcessPacket()

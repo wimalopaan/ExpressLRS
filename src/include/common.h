@@ -21,6 +21,8 @@
 #include "SX12xxDriverCommon.h"
 #endif // UNIT_TEST
 
+#include <array>
+
 typedef enum : uint8_t
 {
     TLM_RATIO_STD = 0,   // Use suggested ratio from ModParams
@@ -369,12 +371,15 @@ extern expresslrs_rf_pref_params_s *ExpressLRS_currAirRate_RFperfParams;
 
 #if defined(WMEXTENSION)
 struct FirmwareBuffer {
+    static constexpr size_t MaxSize = 64 * 1024;
     inline explicit FirmwareBuffer(const size_t size) : size{size}{
         data = new uint8_t[size];
     }
     ~FirmwareBuffer() {
-        delete data;
+        delete[] data;
     }
+    FirmwareBuffer(const FirmwareBuffer&) = delete;
+    FirmwareBuffer& operator=(const FirmwareBuffer&) = delete;
     const size_t size = 0;
     std::array<char, 64> name{};
     uint8_t* data = nullptr;

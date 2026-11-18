@@ -124,6 +124,16 @@ public:
         if (RCdataCallback)
             RCdataCallback();
     }
+#if defined(WMEXTENSION) && defined(WMRXTX_ANALOG)
+    void RCDataReceived(uint32_t channels[], size_t channelCount, const uint8_t offset)
+    {
+        RCdataLastRecv = micros();
+        for (unsigned ch=0; ch<channelCount; ++ch)
+            ChannelData[ch + offset] = channels[ch];
+        if (RCdataCallback)
+            RCdataCallback();
+    }
+#endif
 #endif
 
 

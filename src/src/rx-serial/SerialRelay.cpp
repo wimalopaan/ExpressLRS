@@ -90,7 +90,7 @@ uint32_t SerialRelay::sendRCFrame(bool frameAvailable, bool frameMissed, uint32_
     return DURATION_IMMEDIATELY;
 }
 #else
-uint32_t SerialCRSF::sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t *channelData)
+uint32_t SerialRelay::sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t *channelData)
 {
     if (!frameAvailable)
         return DURATION_IMMEDIATELY;

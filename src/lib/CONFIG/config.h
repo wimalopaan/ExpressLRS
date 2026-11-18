@@ -5,6 +5,7 @@
 #include "options.h"
 #include "common.h"
 #include "OTA.h"
+#include <type_traits>
 
 #if defined(PLATFORM_ESP32)
 #include <nvs_flash.h>
@@ -249,35 +250,57 @@ typedef enum : uint8_t {
     BINDSTORAGE_ADMINISTERED = 3,
 } rx_config_bindstorage_t;
 
+#if defined(WMEXTENSION)
+// 5-bit field stored master-compatible: bits 0-3 at the stock position, bit 4 in the stock 'unused' bits.
+// Keeps the stock layout (no RX_CONFIG_VERSION change) and the .val.inputChannel/.val.mode syntax.
+template<unsigned LoPos, unsigned HiPos>
+struct rx_config_pwm_split5_t {
+    uint32_t raw;
+    operator uint32_t() const { return ((raw >> LoPos) & 0x0fU) | (((raw >> HiPos) & 1U) << 4); }
+    template<typename E, typename = typename std::enable_if<std::is_enum<E>::value>::type>
+    explicit operator E() const { return E(uint32_t(*this)); }
+    rx_config_pwm_split5_t& operator=(const uint32_t v) {
+        raw = (raw & ~((0x0fU << LoPos) | (1U << HiPos))) | ((v & 0x0fU) << LoPos) | (((v >> 4) & 1U) << HiPos);
+        return *this;
+    }
+    rx_config_pwm_split5_t& operator+=(const uint32_t v) { return *this = uint32_t(*this) + v; }
+};
+
 typedef union {
-    struct {
-        uint32_t failsafe:11,    // us output during failsafe +476 (e.g. 1024 here would be 1500us)
-#if defined(WMEXTENSION) && defined(WMCRSF_CHAN_EXT)
-                inputChannel:5, // 0-based input channel
-#else
-                 inputChannel:4, // 0-based input channel
-#endif
-                 inverted:1,     // invert channel output
-#if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
-                 mode:5,         // Output mode (eServoOutputMode)
-#else
-                 mode:4,         // Output mode (eServoOutputMode)
-#endif
-                 stretched:1,    // expand the channel input to 500us - 2500us
-                 narrow:1,       // Narrow output mode (half pulse width)
-                 failsafeMode:2, // failsafe output mode (eServoOutputFailsafeMode)
-#if defined(WMEXTENSION) && defined(WMCRSF_CHAN_EXT)
-         #if defined(WMSERIAL2)
-                 unused:6;       // FUTURE: When someone complains "everyone" uses inverted polarity PWM or something :/
-         #else
-                 unused:7;       // FUTURE: When someone complains "everyone" uses inverted polarity PWM or something :/
-         #endif      
-#else
-            unused:8;       // FUTURE: When someone complains "everyone" uses inverted polarity PWM or something :/
-#endif
+    union {
+        struct {
+            uint32_t failsafe:11,       // us output during failsafe +476 (e.g. 1024 here would be 1500us)
+                     inputChannelLo:4,  // use inputChannel
+                     inverted:1,        // invert channel output
+                     modeLo:4,          // use mode
+                     stretched:1,       // expand the channel input to 500us - 2500us
+                     narrow:1,          // Narrow output mode (half pulse width)
+                     failsafeMode:2,    // failsafe output mode (eServoOutputFailsafeMode)
+                     inputChannelHi:1,  // use inputChannel
+                     modeHi:1,          // use mode
+                     unused:6;
+        };
+        rx_config_pwm_split5_t<11, 24> inputChannel; // 0-based input channel
+        rx_config_pwm_split5_t<16, 25> mode;         // Output mode (eServoOutputMode)
     } val;
     uint32_t raw;
 } rx_config_pwm_t;
+#else
+typedef union {
+    struct {
+        uint32_t failsafe:11,    // us output during failsafe +476 (e.g. 1024 here would be 1500us)
+                 inputChannel:4, // 0-based input channel
+                 inverted:1,     // invert channel output
+                 mode:4,         // Output mode (eServoOutputMode)
+                 stretched:1,    // expand the channel input to 500us - 2500us
+                 narrow:1,       // Narrow output mode (half pulse width)
+                 failsafeMode:2, // failsafe output mode (eServoOutputFailsafeMode)
+                 unused:8;       // FUTURE: When someone complains "everyone" uses inverted polarity PWM or something :/
+    } val;
+    uint32_t raw;
+} rx_config_pwm_t;
+#endif
+static_assert(sizeof(rx_config_pwm_t) == sizeof(uint32_t), "rx_config_pwm_t must stay 32 bit");
 
 typedef struct __attribute__((packed)) {
     uint32_t    version;

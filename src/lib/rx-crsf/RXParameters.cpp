@@ -49,9 +49,15 @@ static selectionParameter luaSerialProtocol = {
 };
 
 #if defined(PLATFORM_ESP32)
-static char serialModes[]   = "Off;CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;DJI RS Pro;HoTT Telemetry;Tramp;SmartAudio;DisplayPort;GPS;Scorpion;ESCape32";
-# if !defined(WMESCAPE32_USE_SIMULTANEOUSLY)
-static char serialModes_s[] = "Off;CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;DJI RS Pro;HoTT Telemetry;Tramp;SmartAudio;DisplayPort;GPS;Scorpion";
+// Option lists must match eSerial1Protocol / eSerial2Protocol (Serial2 has no Scorpion)
+#define SERIAL_MODES_COMMON "Off;CRSF;Inverted CRSF;SBUS;Inverted SBUS;SUMD;DJI RS Pro;HoTT Telemetry;Tramp;SmartAudio;DisplayPort;GPS"
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(TARGET_RX)
+static char serialModes[]   = SERIAL_MODES_COMMON ";Scorpion;ESCape32";
+#else
+static char serialModes[]   = SERIAL_MODES_COMMON ";Scorpion";
+#endif
+# if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(TARGET_RX) && !defined(WMESCAPE32_USE_SIMULTANEOUSLY)
+static char serialModes_s[] = SERIAL_MODES_COMMON ";Scorpion";
 # endif
 static selectionParameter luaSerial1Protocol = {
     {"Protocol2", CRSF_TEXT_SELECTION},
@@ -62,10 +68,18 @@ static selectionParameter luaSerial1Protocol = {
 #endif
 
 #if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+#if defined(WMESCAPE32)
+static char serial2Modes[]   = SERIAL_MODES_COMMON ";ESCape32";
+# if !defined(WMESCAPE32_USE_SIMULTANEOUSLY)
+static char serial2Modes_s[] = SERIAL_MODES_COMMON;
+# endif
+#else
+static char serial2Modes[]   = SERIAL_MODES_COMMON;
+#endif
 static selectionParameter luaSerial2Protocol = {
     {"Protocol3", CRSF_TEXT_SELECTION},
     0, // value
-    serialModes,
+    serial2Modes,
     STR_EMPTYSPACE
 };
 #endif
@@ -616,13 +630,13 @@ void RXEndpoint::registerParameters()
   {
     registerParameter(&luaSerial1Protocol, [](propertiesCommon* item, uint8_t arg){
       const eSerial1Protocol proto = (eSerial1Protocol)arg;
-#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+#if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
 # if !defined(WMESCAPE32_USE_SIMULTANEOUSLY)
       if (proto == PROTOCOL_SERIAL1_ESCAPE32) {
-        luaSerial2Protocol.options = serialModes_s;    
+        luaSerial2Protocol.options = serial2Modes_s;
       }
       else {
-        luaSerial2Protocol.options = serialModes;    
+        luaSerial2Protocol.options = serial2Modes;
       }
 # endif
 #endif
@@ -639,12 +653,12 @@ void RXEndpoint::registerParameters()
 #if defined(WMEXTENSION) && defined(WMSERIAL2) && defined(PLATFORM_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3) && defined(TARGET_RX)
   registerParameter(&luaSerial2Protocol, [](propertiesCommon* item, uint8_t arg){
     const eSerial2Protocol proto = (eSerial2Protocol)arg;
-# if !defined(WMESCAPE32_USE_SIMULTANEOUSLY)
+# if defined(WMESCAPE32) && !defined(WMESCAPE32_USE_SIMULTANEOUSLY)
     if (proto == PROTOCOL_SERIAL2_ESCAPE32) {
-      luaSerial1Protocol.options = serialModes_s;    
+      luaSerial1Protocol.options = serialModes_s;
     }
     else {
-      luaSerial1Protocol.options = serialModes;    
+      luaSerial1Protocol.options = serialModes;
     }
 # endif
     config.SetSerial2Protocol(proto);

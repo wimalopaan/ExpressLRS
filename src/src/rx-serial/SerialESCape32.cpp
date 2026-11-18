@@ -7,32 +7,55 @@
 
 volatile bool reconfigureSerials = false;
 
-extern std::array<SerialEvent, 2> serial_events;
+extern std::array<SerialEventFlags, 2> serial_events;
+extern std::array<ESCape32Status, 2> escape32_status;
+
+static constexpr uint8_t WriteEvents = (uint8_t)SerialEvent::WriteFirmware | (uint8_t)SerialEvent::WriteBootloader;
 
 void serialEvent(const SerialEvent e) {
     DBGLN("SerialEvent: %u", (uint8_t)e);
-    for(SerialEvent& serial_evt: serial_events) {
-        serial_evt = SerialEvent((uint8_t)serial_evt | (uint8_t)e);
+    for (size_t i = 0; i < serial_events.size(); ++i) {
+        if (escape32_status[i].attached) {
+            serial_events[i].fetch_or((uint8_t)e);
+        }
     }
 }
-template<typename F>
-static void onSerialEvent(SerialEvent& serial_evt, const SerialEvent e, F f) {
-    if ((uint8_t)serial_evt & (uint8_t)e) {
-        f();
-        serial_evt = SerialEvent((uint8_t)serial_evt & ~((uint8_t)e));        
+bool escape32Busy() {
+    for (size_t i = 0; i < serial_events.size(); ++i) {
+        if (escape32_status[i].attached && (escape32_status[i].flashing || (serial_events[i] & WriteEvents))) {
+            return true;
+        }
     }
+    return false;
 }
-SerialESCape32::SerialESCape32(Stream &out, Stream &in, ESCape32Status& status, SerialEvent& event, const uint8_t telem_id) : 
+bool SerialESCape32::consumeEvent(const SerialEvent e, uint8_t& consumed) const {
+    if (mEvent & (uint8_t)e) {
+        consumed |= (uint8_t)e;
+        return true;
+    }
+    return false;
+}
+bool SerialESCape32::isWriting(const State s) {
+    // all states from ResetWriteProtection to SetWriteProtectionCheck belong to a write sequence
+    return s >= State::ResetWriteProtection && s <= State::SetWriteProtectionCheck;
+}
+SerialESCape32::SerialESCape32(Stream &out, Stream &in, ESCape32Status& status, SerialEventFlags& event, const uint8_t telem_id) :
     SerialIO{&out, &in}, mParser{status}, mBuffer{new ESCape32Buffer<>}, mEvent{event}, mTelemID{telem_id} {
     DBGLN("SerialESCape32");
-    mEvent = SerialEvent::None;
+    mEvent = 0;
+    status.flashing = false;
+    status.attached = true;
 }
 SerialESCape32::~SerialESCape32() {
+    mParser.escape32_status.attached = false;
+    mParser.escape32_status.flashing = false;
+    mEvent = 0;
     delete mBuffer;
-    mEvent = SerialEvent::None;
 }
 uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t *channelData) {
     // DBGLN("SerialESCape32::sendRCFrame");
+    std::lock_guard<std::mutex> lock{mParser.escape32_status.mutex};
+    uint8_t consumedEvents = 0;
     const auto oldState = mState;
     ++mStateCounter;
     switch(mState) {
@@ -42,11 +65,11 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
         break;
     case State::Idle:
         mState = State::Probe;
-        onSerialEvent(mEvent, SerialEvent::WriteBootloader, [&]{
+        if (consumeEvent(SerialEvent::WriteBootloader, consumedEvents)) {
             mMultiBlockState.reset();
             mState = State::ResetWriteProtection;
-        });
-        onSerialEvent(mEvent, SerialEvent::WriteFirmware, [&]{
+        }
+        if (consumeEvent(SerialEvent::WriteFirmware, consumedEvents)) {
             if (checkTarget()) {
                 DBGLN("SerialESCape32: target checked");
                 mMultiBlockState.reset();
@@ -56,7 +79,7 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
                 DBGLN("SerialESCape32: wrong target");
                 mParser.escape32_status.update = "Wrong target";
             }
-        });
+        }
         break;
     case State::Probe:
         if (mParser) {
@@ -390,6 +413,11 @@ uint32_t SerialESCape32::sendRCFrame(bool frameAvailable, bool frameMissed, uint
         case State::AsciiSaveCheck:
             break;
         }        
+    }
+    // publish the write state before clearing the consumed events, so escape32Busy() never sees a gap
+    mParser.escape32_status.flashing = isWriting(mState);
+    if (consumedEvents) {
+        mEvent.fetch_and((uint8_t)~consumedEvents);
     }
     return ESCAPE32_CALLBACK_INTERVAL_MS;
 }
@@ -755,6 +783,7 @@ bool SerialESCape32::checkTarget() {
     return false;
 }
 void SerialESCape32::processBytes(uint8_t* const bytes, const uint16_t size) {
+    std::lock_guard<std::mutex> lock{mParser.escape32_status.mutex};
     for(uint16_t i = 0; i < size; ++i) {
         if (mSkipFirstReceivedByte) {
             mSkipFirstReceivedByte = false;

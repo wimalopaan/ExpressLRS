@@ -5,6 +5,8 @@
 #include "SerialIO.h"
 #include "common.h"
 #include "esp_crc.h"
+#include <atomic>
+#include <mutex>
 
 #ifdef __cpp_lib_span
 # include <span>
@@ -41,6 +43,10 @@ struct ESCape32Status {
     String input;
     String telem;
     String id;
+    // Guards the strings: written by the serial device (core 1), read by the web server (core 0).
+    std::mutex mutex;
+    std::atomic<bool> attached{false};
+    std::atomic<bool> flashing{false};
 };
 
 enum class SerialEvent : uint8_t {
@@ -49,7 +55,11 @@ enum class SerialEvent : uint8_t {
     WriteBootloader = 1 << 1
 };
 
+using SerialEventFlags = std::atomic<uint8_t>;
+
 void serialEvent(SerialEvent e);
+// True while an attached ESCape32 port has a pending or running write.
+bool escape32Busy();
 
 class SerialESCape32 : public SerialIO {
     static constexpr auto ESCAPE32_CALLBACK_INTERVAL_MS = 50; // must be suffcient to read whole response
@@ -151,6 +161,7 @@ class SerialESCape32 : public SerialIO {
         inline explicit Parser(ESCape32Status& status) : escape32_status{status} {
         }
         inline ~Parser() {
+            std::lock_guard<std::mutex> lock{escape32_status.mutex};
             escape32_status.clear();
         }
         struct BootLoaderInfo {
@@ -196,7 +207,7 @@ class SerialESCape32 : public SerialIO {
         ConfigInfo mCfgInfo;
     };
 public:
-    explicit SerialESCape32(Stream &out, Stream &in, ESCape32Status& status, SerialEvent& event, uint8_t telem_id);
+    explicit SerialESCape32(Stream &out, Stream &in, ESCape32Status& status, SerialEventFlags& event, uint8_t telem_id);
     ~SerialESCape32() override;
     uint32_t sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t *channelData) override;
 protected:
@@ -228,6 +239,8 @@ private:
     void sendFirmware();
     
     bool checkTarget();
+    bool consumeEvent(SerialEvent e, uint8_t& consumed) const;
+    static bool isWriting(State s);
     
     State mState = State::Start;
     uint16_t mStateCounter = 0;
@@ -236,7 +249,7 @@ private:
     bool mSkipFirstReceivedByte = false;
     Parser mParser;
     ESCape32Buffer<>* mBuffer = nullptr;
-    SerialEvent& mEvent;
+    SerialEventFlags& mEvent;
     uint8_t mTelemID;
     
     uint8_t mGoodCounter = 0;

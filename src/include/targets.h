@@ -9,6 +9,16 @@
 
 #define UNDEF_PIN (-1)
 
+#if defined(TARGET_RX) && defined(WMRXTX_ANALOG)
+#error "WMRXTX_ANALOG is only allowed for TARGET_TX"
+#endif
+#if defined(WMRXTX_ANALOG) && defined(WMRELAY)
+#error "WMRXTX_ANALOG and WMRELAY can not be combined"
+#endif
+#if defined(WMSERIAL2) && defined(CONFIG_IDF_TARGET_ESP32C3)
+#error "WMSERIAL2 is not supported on ESP32-C3"
+#endif
+
 /// General Features ///
 #define LED_MAX_BRIGHTNESS 50 //0..255 for max led brightness
 

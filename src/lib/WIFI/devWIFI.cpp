@@ -603,14 +603,24 @@ static void GetConfiguration(AsyncWebServerRequest *request)
     settings["module-type"] = "RX";
     settings["voltage_source_count"] = getDefinedVoltageSourceCount();
 #if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32)
-    settings["escape32_fw"] = String{"[Serial1]: "} + escape32_status[0].firmware + String{"; [Serial2]: "} + escape32_status[1].firmware;
-    settings["escape32_bl"] = String{"[Serial1]: "} + escape32_status[0].bootloader + String{"; [Serial2]: "} + escape32_status[1].bootloader;
-    settings["escape32_target"] = String{"[Serial1]: "} + escape32_status[0].target + String{"; [Serial2]: "} + escape32_status[1].target;
-    settings["escape32_status"] = String{"[Serial1]: "} + escape32_status[0].actual + String{"; [Serial2]: "} + escape32_status[1].actual;
-    settings["escape32_update"] = String{"[Serial1]: "} + escape32_status[0].update + String{"; [Serial2]: "} + escape32_status[1].update;
-    settings["escape32_input"] = String{"[Serial1]: "} + escape32_status[0].input + String{"; [Serial2]: "} + escape32_status[1].input;
-    settings["escape32_telem"] = String{"[Serial1]: "} + escape32_status[0].telem + String{"; [Serial2]: "} + escape32_status[1].telem;
-    settings["escape32_id"] = String{"[Serial1]: "} + escape32_status[0].id + String{"; [Serial2]: "} + escape32_status[1].id;
+    {
+        const auto escape32Field = [](String ESCape32Status::*field) {
+            String s;
+            for (size_t i = 0; i < escape32_status.size(); ++i) {
+                std::lock_guard<std::mutex> lock{escape32_status[i].mutex};
+                s += String{i ? "; [Serial" : "[Serial"} + String(i + 1) + String{"]: "} + escape32_status[i].*field;
+            }
+            return s;
+        };
+        settings["escape32_fw"] = escape32Field(&ESCape32Status::firmware);
+        settings["escape32_bl"] = escape32Field(&ESCape32Status::bootloader);
+        settings["escape32_target"] = escape32Field(&ESCape32Status::target);
+        settings["escape32_status"] = escape32Field(&ESCape32Status::actual);
+        settings["escape32_update"] = escape32Field(&ESCape32Status::update);
+        settings["escape32_input"] = escape32Field(&ESCape32Status::input);
+        settings["escape32_telem"] = escape32Field(&ESCape32Status::telem);
+        settings["escape32_id"] = escape32Field(&ESCape32Status::id);
+    }
 # endif
 #endif
     if (connectionState != radioFailed)
@@ -1020,8 +1030,15 @@ static void WebUploadDataHandler(AsyncWebServerRequest *request, const String& f
 }
 
 #if defined(WMEXTENSION) && defined(WMESCAPE32) && defined(PLATFORM_ESP32) && defined(TARGET_RX)
+static bool escape32UploadAccepted = false;
+static bool escape32UploadOverflow = false;
+
 static void ESCape32UploadResponseHandler(AsyncWebServerRequest *request) {
     DBGLN("ESCape32 update complete");
+    if (!escape32UploadAccepted) {
+        request->send(409, "application/json", "{\"status\": \"error\", \"msg\": \"ESCape32 update in progress or file too large.\"}");
+        return;
+    }
     String msg;
     if (firmwareBuffer && (firmwareBuffer->length > 0)) {
         if (firmwareBuffer->isBootloader) {
@@ -1041,56 +1058,71 @@ static void ESCape32UploadResponseHandler(AsyncWebServerRequest *request) {
 static void ESCape32UploadDataHandler(AsyncWebServerRequest *request, const String& filename, 
                                  size_t index, uint8_t *data, size_t len, bool final) {
     DBGLN("ESCape32 data handler: n: %s i: %u, l: %u, f: %d", filename.c_str(), index, len, (int)final);    
-    const size_t filesize = request->header("X-FileSize").toInt();        
-    
-    if (firmwareBuffer && firmwareBuffer->size < filesize) {
-        DBGLN("ESCape32 data handler: delete buffer");
-        delete firmwareBuffer;
-        firmwareBuffer = nullptr;
-    }
-    if (!firmwareBuffer) {
-        DBGLN("ESCape32 data handler: alloc buffer: %u", filesize);
-        firmwareBuffer = new FirmwareBuffer(std::max(4096U, filesize)); // remains allocated until reboot
-    }
-    if (firmwareBuffer) {
-        if ((index + len) <= firmwareBuffer->size) {
-            DBGLN("ESCape32 data handler: copy: index: %u, len: %u, fs: %u", index, len, filesize);
-            for(uint16_t i = 0; i < len; ++i) {
-                firmwareBuffer->data[index + i] = data[i];
-            }
+    if (index == 0) {
+        // The serial device (core 1) reads firmwareBuffer only while a write is pending or running.
+        const long header = request->header("X-FileSize").toInt();
+        const size_t filesize = header > 0 ? size_t(header) : 0;
+        escape32UploadOverflow = false;
+        escape32UploadAccepted = !escape32Busy() && filesize <= FirmwareBuffer::MaxSize;
+        if (!escape32UploadAccepted) {
+            DBGLN("ESCape32 data handler: rejected (busy or too large: %u)", filesize);
+            return;
         }
-        if (final) {
-            firmwareBuffer->length = (index + len);
-            strcpy(&firmwareBuffer->name[0], filename.c_str());
-            DBGLN("ESCape32 data handler: final: l: %u: a: %x, b:%x", firmwareBuffer->length, firmwareBuffer->data[0], firmwareBuffer->data[1]);
-            if ((firmwareBuffer->data[1] == 0x32) && (firmwareBuffer->data[0] == 0xea) && (firmwareBuffer->length > 4096)) {
-                DBGLN("ESCape32 data handler: isFirmware");
-                firmwareBuffer->isBootloader = false;
-                serialEvent(SerialEvent::WriteFirmware);
-            }
-            else if (firmwareBuffer->length <= 4096) {
-                DBGLN("ESCape32 data handler: isBootloader");
-                if (!(firmwareBuffer->length & 1023) && firmwareBuffer->length != 4096) {
-                    DBGLN("ESCape32 data handler: augment");
-                    for(uint8_t i = 0; i < 4; ++i) {
-                        const uint16_t index = firmwareBuffer->length + i;
-                        if (index < firmwareBuffer->size) {
-                            firmwareBuffer->data[index] = 0xff;
-                        }
-                    }
-                    firmwareBuffer->length += 4; // Ensure last block marker
+        const size_t required = std::max(size_t{4096}, filesize);
+        if (firmwareBuffer && firmwareBuffer->size < required) {
+            DBGLN("ESCape32 data handler: delete buffer");
+            delete firmwareBuffer;
+            firmwareBuffer = nullptr;
+        }
+        if (!firmwareBuffer) {
+            DBGLN("ESCape32 data handler: alloc buffer: %u", required);
+            firmwareBuffer = new FirmwareBuffer(required); // remains allocated until reboot
+        }
+        firmwareBuffer->length = 0;
+    }
+    if (!escape32UploadAccepted || !firmwareBuffer) {
+        return;
+    }
+    if (index + len > firmwareBuffer->size) {
+        escape32UploadOverflow = true;
+    }
+    else {
+        memcpy(&firmwareBuffer->data[index], data, len);
+    }
+    if (!final) {
+        return;
+    }
+    if (escape32UploadOverflow) {
+        DBGLN("ESCape32 data handler: upload larger than buffer");
+        firmwareBuffer->length = 0;
+        return;
+    }
+    firmwareBuffer->length = (index + len);
+    strlcpy(firmwareBuffer->name.data(), filename.c_str(), firmwareBuffer->name.size());
+    DBGLN("ESCape32 data handler: final: l: %u: a: %x, b:%x", firmwareBuffer->length, firmwareBuffer->data[0], firmwareBuffer->data[1]);
+    if ((firmwareBuffer->data[1] == 0x32) && (firmwareBuffer->data[0] == 0xea) && (firmwareBuffer->length > 4096)) {
+        DBGLN("ESCape32 data handler: isFirmware");
+        firmwareBuffer->isBootloader = false;
+        serialEvent(SerialEvent::WriteFirmware);
+    }
+    else if (firmwareBuffer->length <= 4096) {
+        DBGLN("ESCape32 data handler: isBootloader");
+        if (!(firmwareBuffer->length & 1023) && firmwareBuffer->length != 4096) {
+            DBGLN("ESCape32 data handler: augment");
+            for(uint8_t i = 0; i < 4; ++i) {
+                const uint16_t index = firmwareBuffer->length + i;
+                if (index < firmwareBuffer->size) {
+                    firmwareBuffer->data[index] = 0xff;
                 }
-                firmwareBuffer->isBootloader = true;
-                serialEvent(SerialEvent::WriteBootloader);
             }
-            else {
-                firmwareBuffer->length = 0;
-                DBGLN("ESCape32 data handler: unrecognized");                
-            }
+            firmwareBuffer->length += 4; // Ensure last block marker
         }
-        else {
-            firmwareBuffer->length = 0;
-        }
+        firmwareBuffer->isBootloader = true;
+        serialEvent(SerialEvent::WriteBootloader);
+    }
+    else {
+        firmwareBuffer->length = 0;
+        DBGLN("ESCape32 data handler: unrecognized");
     }
 }
 #endif

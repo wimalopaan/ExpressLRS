@@ -44,7 +44,7 @@ namespace std {
 }
 # endif
 std::array<ESCape32Status, 2> escape32_status{};
-std::array<SerialEvent, 2>    serial_events{SerialEvent::None, SerialEvent::None};
+std::array<SerialEventFlags, 2> serial_events{};
 #endif
 #if defined(WMEXTENSION) && defined(WMESPNOW) && defined(TARGET_RX)
 #include "rx_espnow.h"

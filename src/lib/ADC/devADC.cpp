@@ -97,6 +97,13 @@ uint16_t analogToCrsf(const uint16_t ch, const uint16_t an) {
     const int result = CRSF_CHANNEL_VALUE_MID + delta;
     return std::max(std::min(result, CRSF_CHANNEL_VALUE_STD_MAX), CRSF_CHANNEL_VALUE_STD_MIN);
 }
+static bool isAnalogPin(const int8_t pin) {
+#if defined(PLATFORM_ESP32)
+    return digitalPinToAnalogChannel(pin) != -1;
+#else
+    return pin == A0;
+#endif
+}
 static int32_t adcToMilliVolts(uint32_t adc) {
     const int offset = hardware_int(HARDWARE_vbat_offset);
     const int scale = hardware_int(HARDWARE_vbat_scale);
@@ -126,12 +133,16 @@ static int start()
         const int maxAdcChannels = std::min(MAX_ADC_CHANNELS, GPIO_PIN_ADC_INPUTS_COUNT);
         for (int ch = 0; ch < maxAdcChannels; ++ch) {
             const int8_t pin = GPIO_PIN_ADC_INPUTS[ch];
-            if (digitalPinToAnalogChannel(pin) != -1) {
+            if (isAnalogPin(pin)) {
                 pinMode(pin, INPUT);
             }
             else {
                 pinMode(pin, INPUT_PULLUP);
             }
+        }
+        // defaults for the channels not driven by the ADC, until the handset delivers them
+        for (int ch = maxAdcChannels; ch < (CRSF_NUM_CHANNELS + CRSF_EXTRA_CHANNELS); ++ch) {
+            ChannelData[ch] = CRSF_CHANNEL_VALUE_MID;
         }
 
 #if defined(PLATFORM_ESP32)
@@ -205,7 +216,7 @@ static int timeout()
     const float f = analogFilterCenti / 100.0f;
     for (int ch = 0; ch < maxAdcChannels; ++ch) {
         const int8_t pin = GPIO_PIN_ADC_INPUTS[ch];
-        if (digitalPinToAnalogChannel(pin) != -1) {
+        if (isAnalogPin(pin)) {
             analogReadings[ADC_MAX_DEVICES + ch] = f * analogReadings[ADC_MAX_DEVICES + ch] + (1.0 - f) * analogRead(pin);
         }
     }
@@ -237,24 +248,22 @@ static int timeout()
         }
     }
     else {
-        for (int ch = 0; ch < (CRSF_NUM_CHANNELS + CRSF_EXTRA_CHANNELS); ++ch) {
-            if (ch < maxAdcChannels) {
-                const int8_t pin = GPIO_PIN_ADC_INPUTS[ch];
-                if (digitalPinToAnalogChannel(pin) != -1) {
-                    const float f = (1.0f * config.GetVBatCalib()) / vbatMillis;
-                    ChannelData[ch] = analogToCrsf(ch, (f * analogReadings[ADC_MAX_DEVICES + ch]));
-                }
-                else {
-                    if (digitalRead(pin) == HIGH) {
-                        ChannelData[ch] = CRSF_CHANNEL_VALUE_STD_MAX;                        
-                    }
-                    else {
-                        ChannelData[ch] = CRSF_CHANNEL_VALUE_STD_MIN;                        
-                    }
-                }
+        // supply voltage compensation, only if both the calibration and the actual value are known
+        const uint32_t vbatCalib = config.GetVBatCalib();
+        const float vbatComp = ((vbatCalib > 0) && (vbatMillis > 0)) ? (1.0f * vbatCalib) / vbatMillis : 1.0f;
+        // only the ADC channels: the others belong to the handset
+        for (int ch = 0; ch < maxAdcChannels; ++ch) {
+            const int8_t pin = GPIO_PIN_ADC_INPUTS[ch];
+            if (isAnalogPin(pin)) {
+                ChannelData[ch] = analogToCrsf(ch, (vbatComp * analogReadings[ADC_MAX_DEVICES + ch]));
             }
             else {
-                ChannelData[ch] = CRSF_CHANNEL_VALUE_MID;
+                if (digitalRead(pin) == HIGH) {
+                    ChannelData[ch] = CRSF_CHANNEL_VALUE_STD_MAX;
+                }
+                else {
+                    ChannelData[ch] = CRSF_CHANNEL_VALUE_STD_MIN;
+                }
             }
         }
         if (gauge.channel >= 0) {

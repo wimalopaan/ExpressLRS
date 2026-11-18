@@ -7,6 +7,7 @@
  */
 
 #include "OTA.h"
+#include <array>
 #include <cassert>
 
 static_assert(sizeof(OTA_Packet4_s) == OTA4_PACKET_SIZE, "OTA4 packet struct is invalid!");
@@ -524,12 +525,21 @@ bool ICACHE_RAM_ATTR UnpackChannelDataHybridWide(OTA_Packet_s const * const otaP
 struct ExpMean {
     void operator=(const uint32_t in) {
         input = in;
+        if (!primed) {
+            // start at the first received value instead of ramping from MID (e.g. throttle)
+            value = in;
+            primed = true;
+        }
+    }
+    bool isPrimed() const {
+        return primed;
     }
     uint32_t process() {
         value = ((1000 - w) * value + w * input) / 1000;
         return value;
     }
 private:
+    bool primed = false;
 #if defined(WMFILTER32W)
     uint32_t w = WMFILTER32W;
 #else
@@ -581,14 +591,24 @@ bool ICACHE_RAM_ATTR UnpackChannelData8ch_32(OTA_Packet_s const * const otaPktPt
         DBGLN("Up8 %d", ota8->rc.chGroup);
         chDstLow = 0;
         chDstHigh = (ota8->rc.chGroup > 0) ? 8 : 4;
+#if !defined(WMFILTER32)
         // For 8ch and 12ch mode, Arm status is placed in CH14/AUX10 just like non-fullres
         channelData[13] = BIT_to_CRSF(isArmed);
+#endif
     }
 #if defined(WMFILTER32)
     UnpackChannels4x10ToUInt11(&ota8->rc.chLow, &ch32Filters[chDstLow]);
     UnpackChannels4x10ToUInt11(&ota8->rc.chHigh, &ch32Filters[chDstHigh]);
     for(uint8_t i = 0; i < ch32Filters.size(); ++i) {
-        channelData[i] = ch32Filters[i].process();
+        // channels never received keep their value, like without the filter
+        if (ch32Filters[i].isPrimed()) {
+            channelData[i] = ch32Filters[i].process();
+        }
+    }
+    if (OtaSwitchModeCurrent != smHybridOr16ch)
+    {
+        // For 8ch and 12ch mode, Arm status is placed in CH14/AUX10 just like non-fullres (after filtering, unfiltered)
+        channelData[13] = BIT_to_CRSF(isArmed);
     }
 #else
       // Analog channels packed 10bit covering the entire CRSF extended range (i.e. not just 988-2012)

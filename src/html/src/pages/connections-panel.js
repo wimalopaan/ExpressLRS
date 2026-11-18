@@ -164,9 +164,9 @@ class ConnectionsPanel extends LitElement {
         const htmlFields = []
         elrsState.config.pwm.forEach((item, index) => {
             const failsafe = (item.config & 2047) + 476; // 11 bits
-            const ch = (item.config >> 11) & 15; // 4 bits
+            const ch = ((item.config >> 11) & 15) | (((item.config >> 24) & 1) << 4); // 4 bits + high bit
             const inv = (item.config >> 15) & 1
-            const mode = (item.config >> 16) & 15; // 4 bits
+            const mode = ((item.config >> 16) & 15) | (((item.config >> 25) & 1) << 4); // 4 bits + high bit
             const stretch = (item.config >> 20) & 1
             const failsafeMode = (item.config >> 22) & 3; // 2 bits
             const features = item.features
@@ -310,7 +310,7 @@ class ConnectionsPanel extends LitElement {
             if (normalizeFields) failsafeField.value = failsafe
             let failsafeMode = failsafeModeField.value
 
-            const raw = (failsafeMode << 22) | (stretch << 20) | (mode << 16) | (invert << 15) | (inChannel << 11) | (failsafe - 476)
+            const raw = (((mode >> 4) & 1) << 25) | (((inChannel >> 4) & 1) << 24) | (failsafeMode << 22) | (stretch << 20) | ((mode & 15) << 16) | (invert << 15) | ((inChannel & 15) << 11) | (failsafe - 476)
             // console.log(`PWM ${ch} mode=${mode} input=${inChannel} fs=${failsafe} fsmode=${failsafeMode} inv=${invert} stretch=${stretch} raw=${raw}`)
             outData.push(raw)
             ++ch
